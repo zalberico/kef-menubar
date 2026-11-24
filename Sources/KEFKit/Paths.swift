@@ -21,6 +21,13 @@ public enum KEFPath {
     public static let eqProfileV2 = "kef:eqProfile/v2"
     /// Ranges and choices of each EQ setting (`getRows`).
     public static let eqDescriptors = "kef:dsp/editValue"
+
+    /// Firmware update lifecycle (see `Firmware.swift`). The two actions are only reachable
+    /// through `KEFClient.checkForFirmwareUpdate()` and `installFirmwareUpdate()`.
+    public static let firmwareUpdateStatus = "firmwareupdate:updateStatus"
+    public static let firmwareInstallInfo = "kef:fwupgrade/info"
+    public static let firmwareCheckForUpdate = "firmwareupdate:checkForUpdate"
+    public static let firmwareDownloadNewUpdate = "firmwareupdate:downloadNewUpdate"
 }
 
 public enum Endpoint {
@@ -33,9 +40,10 @@ public enum Endpoint {
 
 /// Paths this client refuses to write or activate.
 ///
-/// Factory reset is excluded for good. Reboot, network setup, firmware updates,
-/// pairing wipes and DSP restore are not exposed by this app either, so they are
-/// refused too rather than being one typo away.
+/// Factory reset is excluded for good. Reboot, network setup, pairing wipes and DSP
+/// restore are not exposed by this app either, so they are refused too rather than being
+/// one typo away. Firmware paths are refused here as well: the two firmware actions the
+/// app offers go through dedicated `KEFClient` methods that check the speaker's state first.
 public enum KEFSafety {
     public static let blockedPrefixes: [String] = [
         "kef:speakerFactoryReset",

@@ -42,6 +42,8 @@ through KEF's servers, and there are no third-party dependencies.
   volume overlay. Holding a volume key repeats.
 - **Live updates:** changes from the remote, KEF Connect, AirPlay or anything else show up
   within a second
+- **Firmware updates:** see the installed version, check for updates on demand, and
+  install one after a confirmation. The panel tells you when an update is available.
 - **Settings:** Bonjour discovery or a fixed IP address, shortcut volume step, the
   speaker's maximum volume limit, launch at login
 - **Native and light:** SwiftUI, light and dark mode, no Dock icon, about 2 MB
@@ -122,20 +124,26 @@ $K 192.168.1.20 control pause      # pause | next | previous
 $K 192.168.1.20 eq                 # current input's EQ profile and allowed ranges
 $K 192.168.1.20 eq-set trebleAmount -1
 $K 192.168.1.20 watch 60           # print live events for 60 s (default 30)
+$K 192.168.1.20 firmware           # installed version and update status
+$K 192.168.1.20 firmware check     # ask the speaker to look for an update (installing is app-only)
 ```
 
 ## FAQ
 
-**Do I still need KEF Connect?** Only for initial setup (Wi-Fi, pairing) and if you want to
-force a firmware update. The speaker checks KEF's update feed by itself every 4 hours, and
-its settings include a silent update after about an hour idle. This app never touches
-firmware.
+**Do I still need KEF Connect?** Only for initial setup (Wi-Fi, pairing). Firmware updates
+are in **Settings › Firmware**: **Check Now** asks the speaker to look for one, and
+**Update…** installs it after you confirm. The speaker then restarts and is unreachable for
+a few minutes. It also checks by itself every few hours and can install updates while
+idle, so you may never need the button.
 
-**Is it safe to point at my speakers?** The app only reads state and changes everyday
-settings: volume, mute, input, playback, EQ and the volume limit. The client library
+**Is it safe to point at my speakers?** The app reads state and changes everyday settings:
+volume, mute, input, playback, EQ and the volume limit. It can also ask the speaker to
+check for firmware and, only after you confirm, install an update. The client library
 refuses destructive paths outright, whatever calls it: factory reset, reboot, network
-setup, firmware update, pairing wipes and DSP restore (`KEFSafety` in
-`Sources/KEFKit/Paths.swift`). Volume and EQ writes are held off for about 1.5 s after
+setup, pairing wipes and DSP restore (`KEFSafety` in `Sources/KEFKit/Paths.swift`).
+Firmware paths are refused there too, except for the two actions KEF Connect itself
+uses. Those are reachable only through dedicated methods, and the install one first
+re-reads the speaker and refuses unless the speaker reports an update. Volume and EQ writes are held off for about 1.5 s after
 an input change, so a shortcut can't apply one input's level to another.
 
 **Does it phone home?** No. It talks only to your speaker. The one exception is album art,
@@ -173,6 +181,12 @@ What we found on the LSX II on firmware 3.1.141:
   plays, so on/off follows `physicalSource`.
 - Errors come back as HTTP 500 with a JSON body. An expired event queue is an HTTP 400
   with plain text.
+- Firmware updates follow KEF Connect: activating `firmwareupdate:checkForUpdate` makes
+  `firmwareupdate:updateStatus` report `newUpdateAvailable` with the version, and
+  activating `firmwareupdate:downloadNewUpdate` downloads and installs it (progress in
+  `kef:fwupgrade/info`). The [homeassistant-kef](https://github.com/EvotecIT/homeassistant-kef)
+  notes on these paths were a useful reference. The install step hasn't been seen live
+  here yet, because there hasn't been a newer LSX II release to install.
 
 The client falls back to plain HTTP on port 80 for older firmware that doesn't serve 4430.
 

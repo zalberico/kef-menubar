@@ -198,4 +198,41 @@ struct TransportTests {
         await #expect(throws: KEFError.self) { try await queue.poll() }
         #expect(await queue.queueID == nil)
     }
+    // MARK: Firmware
+
+    static let firmwareIdle = #"[{"type":"firmwareUpdateStatus","firmwareUpdateStatus":{"state":"idle","downloadProgress":0}}]"#
+    static let firmwareAvailable = #"[{"type":"firmwareUpdateStatus","firmwareUpdateStatus":{"state":"newUpdateAvailable","downloadProgress":0,"imageDescription":{"version":"3.2.10.0x1234567","forcedUpdate":false}}}]"#
+
+    @Test func firmwareCheckSendsTheSignedCheckAction() async throws {
+        StubProtocol.install { seen in
+            if Self.isAddUser(seen) { return (200, "") }
+            return seen.method == "GET" ? (200, #"[{"type":"string_","string_":"LSX II"}]"#) : (200, "{}")
+        }
+        try await makeClient(.https).checkForFirmwareUpdate()
+        let post = try #require(StubProtocol.seen.last)
+        #expect(post.method == "POST")
+        #expect(String(decoding: post.body!, as: UTF8.self) == #"{"path":"firmwareupdate:checkForUpdate","role":"activate","value":{}}"#)
+        #expect(Self.verify(post))
+    }
+
+    @Test func firmwareInstallIsRefusedWithoutAnAvailableUpdate() async throws {
+        StubProtocol.install { seen in
+            if Self.isAddUser(seen) { return (200, "") }
+            return seen.method == "GET" ? (200, Self.firmwareIdle) : (200, "{}")
+        }
+        await #expect(throws: KEFError.self) { try await makeClient(.https).installFirmwareUpdate() }
+        #expect(!StubProtocol.seen.contains { $0.body.map { String(decoding: $0, as: UTF8.self).contains("downloadNewUpdate") } ?? false })
+    }
+
+    @Test func firmwareInstallSendsDownloadNewUpdateWhenAvailable() async throws {
+        StubProtocol.install { seen in
+            if Self.isAddUser(seen) { return (200, "") }
+            return seen.method == "GET" ? (200, Self.firmwareAvailable) : (200, "{}")
+        }
+        try await makeClient(.https).installFirmwareUpdate()
+        let posts = StubProtocol.seen.filter { $0.method == "POST" && !Self.isAddUser($0) }
+        #expect(posts.count == 1)
+        #expect(String(decoding: posts[0].body!, as: UTF8.self) == #"{"path":"firmwareupdate:downloadNewUpdate","role":"activate","value":{}}"#)
+        #expect(Self.verify(posts[0]))
+    }
 }

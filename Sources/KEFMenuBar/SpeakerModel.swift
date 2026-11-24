@@ -47,6 +47,16 @@ final class SpeakerModel {
     /// previous input's values would be wrong (or loud).
     private(set) var inputSettling = false
 
+    // Firmware (see Firmware.swift in KEFKit).
+    enum FirmwareActivity: Equatable { case idle, checking, updating }
+    /// `nil` until read, or if the speaker doesn't report it.
+    private(set) var firmwareStatus: FirmwareUpdateStatus?
+    private(set) var firmwareInstall: FirmwareInstallInfo?
+    private(set) var firmwareActivity: FirmwareActivity = .idle
+    private(set) var firmwareCheckedAt: Date?
+    /// Outcome of the last check or update, shown in Settings.
+    private(set) var firmwareNotice: String?
+
     @ObservationIgnored private var client: KEFClient?
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private var retryDelay: Duration = .seconds(1)
@@ -64,6 +74,9 @@ final class SpeakerModel {
     @ObservationIgnored private var eqWriter: Task<Void, Never>?
     @ObservationIgnored private var eqHoldUntil = ContinuousClock.now
     @ObservationIgnored private var artworkURL: URL?
+    @ObservationIgnored private var updateStartedFrom: String?
+    @ObservationIgnored private var updateStartedAt: ContinuousClock.Instant?
+    @ObservationIgnored private var updateSpeaker: String?
 
     private let log = Logger(subsystem: "KEFMenuBar", category: "speaker")
 
@@ -82,16 +95,22 @@ final class SpeakerModel {
     /// while the speaker plays (seen on LSX II 3.1.141, with powermanager "online").
     var isOn: Bool { isOnline && source != nil && source != .standby }
     var volumeCeiling: Int { volumeLimited ? max(1, maximumVolume) : 100 }
+    /// The speaker is installing firmware (it restarts at the end).
+    var firmwareInstalling: Bool { status == .firmwareUpgrade || firmwareInstall?.isInstalling == true }
+    var firmwareUpdateAvailable: Bool {
+        isOnline && firmwareActivity == .idle && !firmwareInstalling && firmwareStatus?.isUpdateAvailable == true
+    }
+
     var showsNowPlaying: Bool { isOn && (source == .wifi || source == .bluetooth) && player.hasMetadata }
 
     var statusText: String {
         switch connection {
         case .searching: return "Looking for speaker…"
         case .connecting(let host): return "Connecting to \(host)…"
-        case .offline: return "Offline — retrying"
+        case .offline: return firmwareActivity == .updating ? "Restarting after update…" : "Offline — retrying"
         case .online:
             if status == .networkSetup { return "Network setup" }
-            if status == .firmwareUpgrade { return "Updating firmware" }
+            if status == .firmwareUpgrade || firmwareActivity == .updating { return "Updating firmware" }
             guard let source, source != .standby else { return "Standby" }
             let input = source == .wifi ? "Wi-Fi / AirPlay" : source.displayName
             return muted ? "\(input) · Muted" : input
@@ -129,8 +148,18 @@ final class SpeakerModel {
             if client?.host != host {
                 if let client { await client.transport.close() }
                 client = KEFClient(host: host)
-                modelName = nil
-                firmware = nil
+                if self.host != host {  // another address: forget what the old one reported
+                    modelName = nil
+                    firmware = nil
+                    firmwareStatus = nil
+                    firmwareInstall = nil
+                    firmwareCheckedAt = nil
+                }
+                // Keep following an update across reconnects (Retry, a new DHCP address after
+                // the restart) as long as it's the same speaker; drop it for another speaker.
+                if firmwareActivity == .updating, updateSpeaker != speakerIdentity(host: host) {
+                    finishUpdate(nil)
+                }
             }
             guard let client else { return }
             self.host = host
@@ -150,6 +179,9 @@ final class SpeakerModel {
     }
 
     private func backoff() async {
+        if firmwareActivity == .updating, let started = updateStartedAt, ContinuousClock.now - started > .seconds(30 * 60) {
+            finishUpdate("The speaker hasn't come back after the update. Check that it's plugged in and on the network.")
+        }
         try? await Task.sleep(for: retryDelay)
         retryDelay = min(retryDelay * 2, .seconds(30))
     }
@@ -198,6 +230,8 @@ final class SpeakerModel {
         retryDelay = .seconds(1)
         isSecure = await client.transport.isSecure
         eqRanges = await client.eqRanges()
+        let firmwareWatch = Task { await watchFirmware(client) }
+        defer { firmwareWatch.cancel() }
         log.info("online: \(self.name, privacy: .public) at \(client.host, privacy: .public), secure=\(self.isSecure == true), source=\(self.source?.rawValue ?? "?", privacy: .public), volume=\(self.volume)")
         var queueResets = 0
         while true {
@@ -267,7 +301,7 @@ final class SpeakerModel {
         self.volumeLimited = try await limited
         setPlayer(try await player)
         if let profile = await eq, ContinuousClock.now >= eqHoldUntil { self.eq = profile }
-        if modelName == nil {
+        if modelName == nil || firmwareActivity == .updating {
             modelName = try? await client.getValue(KEFPath.modelName).string
             firmware = try? await client.firmwareVersion()
         }
@@ -504,4 +538,118 @@ final class SpeakerModel {
     }
 
     func range(_ key: EqKey) -> EqRange { eqRanges[key] ?? EqRange.defaults[key] ?? EqRange(0, 1, step: 1) }
+    // MARK: Firmware
+
+    /// Reads the firmware state at once, then every 15 minutes, or every 2 s while a
+    /// check, download or install is going on.
+    private func watchFirmware(_ client: KEFClient) async {
+        var next = ContinuousClock.now
+        while !Task.isCancelled {
+            let active = firmwareActivity != .idle || firmwareStatus?.isBusy == true || firmwareInstalling
+            if active || ContinuousClock.now >= next {
+                await refreshFirmware(client)
+                next = ContinuousClock.now + .seconds(15 * 60)
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    /// Returns whether the update status could be read.
+    @discardableResult
+    private func refreshFirmware(_ client: KEFClient) async -> Bool {
+        async let status = try? client.firmwareUpdateStatus()
+        async let install = try? client.firmwareInstallInfo()
+        let newStatus = await status
+        if let newStatus { firmwareStatus = newStatus }
+        if let install = await install { firmwareInstall = install }
+        if firmwareActivity == .updating { followUpdate() }
+        return newStatus != nil
+    }
+
+    /// Who an update belongs to: the chosen speaker's MAC in automatic mode, else its address.
+    private func speakerIdentity(host: String) -> String {
+        let mac = Self.normalizedMAC(preferences.preferredSpeakerID)
+        return preferences.hostMode == .automatic && mac.count == 12 ? mac : host
+    }
+
+    /// Ask the speaker to look for new firmware (it stays in standby if it was).
+    func checkForFirmwareUpdate() {
+        guard let client, isOnline, firmwareActivity == .idle, !firmwareInstalling else { return }
+        firmwareActivity = .checking
+        firmwareNotice = nil
+        Task {
+            var asked = true
+            do {
+                try await client.checkForFirmwareUpdate()
+            } catch let error as KEFError where error.isConnection {
+                // The request may still have arrived: read the status before deciding.
+                log.info("firmware check: no answer (\(error.localizedDescription, privacy: .public)), reading status anyway")
+            } catch {
+                report(error)
+                asked = false
+            }
+            var readStatus = false
+            if asked {
+                // At least ~5 s, so a check that starts a moment late is still seen.
+                for second in 0..<20 {
+                    try? await Task.sleep(for: .seconds(1))
+                    if await refreshFirmware(client) { readStatus = true }
+                    if second >= 4, firmwareStatus?.isBusy != true { break }
+                }
+            }
+            if asked && readStatus {
+                firmwareCheckedAt = Date()
+            } else {
+                firmwareNotice = "Couldn't check for updates. Try again in a moment."
+            }
+            firmwareActivity = .idle
+            log.info("firmware check: \(self.firmwareStatus?.rawState ?? "no status", privacy: .public) \(self.firmwareStatus?.availableVersion ?? "", privacy: .public)")
+        }
+    }
+
+    /// Have the speaker download and install the update it reported. Only call after the
+    /// user confirmed: the speaker stops playing and restarts.
+    func installFirmwareUpdate() {
+        guard let client, firmwareUpdateAvailable else { return }
+        firmwareActivity = .updating
+        firmwareNotice = nil
+        updateStartedFrom = firmware
+        updateStartedAt = .now
+        updateSpeaker = host.map { speakerIdentity(host: $0) }
+        log.info("firmware update requested: \(self.firmware ?? "?", privacy: .public) -> \(self.firmwareStatus?.availableVersion ?? "?", privacy: .public)")
+        Task {
+            do {
+                try await client.installFirmwareUpdate()
+            } catch let error as KEFError where error.isConnection {
+                // No answer: the speaker may already be busy. Follow the status as usual.
+                log.info("firmware update: no answer (\(error.localizedDescription, privacy: .public))")
+            } catch {
+                report(error)
+                finishUpdate("The update didn't start: \((error as? KEFError)?.errorDescription ?? error.localizedDescription)")
+            }
+        }
+    }
+
+    /// While updating: done once the speaker comes back with another version, or it reports an
+    /// error, or nothing has happened for a long time.
+    private func followUpdate() {
+        guard let started = updateStartedAt else { return }
+        if let firmware, let from = updateStartedFrom, firmware != from {
+            finishUpdate("Updated to \(shortFirmwareVersion(firmware)).")
+        } else if let install = firmwareInstall, install.hasError {
+            finishUpdate("The speaker reported an update error (\(install.error ?? "unknown")).")
+        } else if ContinuousClock.now - started > .seconds(30 * 60), !firmwareInstalling, firmwareStatus?.isBusy != true {
+            finishUpdate("The update hasn't finished yet. The speaker may complete it on its own while idle.")
+        }
+    }
+
+    /// Stop following the update; `nil` drops it silently (another speaker was chosen).
+    private func finishUpdate(_ notice: String?) {
+        log.info("firmware update: \(notice ?? "no longer followed", privacy: .public)")
+        firmwareNotice = notice
+        firmwareActivity = .idle
+        updateStartedFrom = nil
+        updateStartedAt = nil
+        updateSpeaker = nil
+    }
 }

@@ -566,6 +566,22 @@ private struct FooterView: View {
                     .foregroundStyle(.orange)
                     .lineLimit(2)
             }
+            if model.firmwareActivity == .updating || (model.isOnline && model.firmwareInstalling) {
+                Label("Updating firmware. Keep the speaker plugged in; it restarts when done.",
+                      systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if model.firmwareUpdateAvailable {
+                Button {
+                    NSApp.activate()
+                    openSettings()
+                } label: {
+                    Label("Firmware update available", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 11))
+            }
             Divider()
             HStack {
                 Button("Settings…") {

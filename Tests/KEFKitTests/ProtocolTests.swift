@@ -251,3 +251,46 @@ struct TrustTests {
         #expect(!KEFTrust.isIPAddress("lsxii.local"))
     }
 }
+
+struct FirmwareTests {
+    @Test func parsesUpdateStatus() throws {
+        let json = try JSON(parsing: #"{"type":"firmwareUpdateStatus","firmwareUpdateStatus":{"state":"newUpdateAvailable","downloadProgress":0,"imageDescription":{"version":"3.2.10.0x1234567","forcedUpdate":false,"imageSize":123}}}"#)
+        let status = try #require(FirmwareUpdateStatus(json: json))
+        #expect(status.state == .available)
+        #expect(status.isUpdateAvailable && !status.isBusy)
+        #expect(status.availableVersion == "3.2.10.0x1234567")
+        #expect(status.isForced == false)
+        #expect(shortFirmwareVersion(status.availableVersion!) == "3.2.10")
+
+        let idle = try #require(FirmwareUpdateStatus(json: try JSON(parsing: #"{"state":"idle","downloadProgress":0}"#)))
+        #expect(idle.state == .idle && !idle.isUpdateAvailable && idle.availableVersion == nil)
+
+        let downloading = try #require(FirmwareUpdateStatus(json: JSON(parsing: #"{"state":"downloading","downloadProgress":42}"#)))
+        #expect(downloading.isBusy && downloading.downloadProgress == 42)
+        #expect(try FirmwareUpdateStatus(json: JSON(parsing: #"{"state":"downloaded"}"#))?.isUpdateAvailable == true)
+
+        let unknown = try #require(FirmwareUpdateStatus(json: JSON(parsing: #"{"state":"somethingNew"}"#)))
+        #expect(unknown.state == FirmwareUpdateStatus.State.other("somethingNew"))
+        #expect(!unknown.isUpdateAvailable && !unknown.isBusy)
+        #expect(try FirmwareUpdateStatus(json: JSON(parsing: #"{"downloadProgress":0}"#)) == nil)
+    }
+
+    @Test func parsesInstallInfo() throws {
+        let json = try JSON(parsing: #"{"kefFirmwareUpgradeInfo":{"firmwareUpgradeStatus":"finish","firmwareUpgradeProgress":{"systemMCU":100,"slaveMCU":100},"firmwareUpgradeError":"noError"},"type":"kefFirmwareUpgradeInfo"}"#)
+        let info = try #require(FirmwareInstallInfo(json: json))
+        #expect(!info.isInstalling && !info.hasError)
+        #expect(info.progress == ["systemMCU": 100, "slaveMCU": 100])
+
+        let busy = try #require(FirmwareInstallInfo(json: JSON(parsing: #"{"firmwareUpgradeStatus":"upgrading","firmwareUpgradeProgress":{"systemMCU":40,"slaveMCU":10},"firmwareUpgradeError":"noError"}"#)))
+        #expect(busy.isInstalling && busy.overallProgress == 10)
+    }
+
+    /// The firmware actions stay refused for generic writes; only the dedicated methods reach them.
+    @Test(arguments: [KEFPath.firmwareCheckForUpdate, KEFPath.firmwareDownloadNewUpdate,
+                      "firmwareupdate:installUpdate", KEFPath.firmwareInstallInfo])
+    func genericFirmwareWritesStayBlocked(_ path: String) async {
+        #expect(KEFSafety.isBlocked(path))
+        let client = KEFClient(host: "192.0.2.1")  // TEST-NET: must fail before any I/O
+        await #expect(throws: KEFError.blocked(path)) { try await client.activate(path) }
+    }
+}

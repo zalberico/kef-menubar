@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var loginStatus = LaunchAtLogin.status
     @State private var loginError: String?
     @State private var maximumVolume = 100
+    @State private var confirmingUpdate = false
 
     private var prefs: Preferences { model.preferences }
 
@@ -92,13 +93,43 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Firmware") {
+                LabeledContent("Installed") {
+                    Text(model.firmware.map(shortFirmwareVersion) ?? "—").foregroundStyle(.secondary)
+                }
+                LabeledContent("Status") {
+                    Text(firmwareStatusText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                }
+                if let progress = firmwareProgress {
+                    ProgressView(value: Double(min(max(progress, 0), 100)), total: 100)
+                }
+                HStack {
+                    if let notice = model.firmwareNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(model.firmwareActivity == .checking ? "Checking…" : "Check Now") { model.checkForFirmwareUpdate() }
+                        .disabled(!model.isOnline || model.firmwareActivity != .idle || model.firmwareInstalling)
+                    if model.firmwareUpdateAvailable {
+                        Button("Update…") { confirmingUpdate = true }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+
             Section {
-                Text("The speaker checks for firmware updates on its own. To update right away, use the KEF Connect app. This app never updates firmware, resets, reboots or reconfigures the speaker's network.")
+                Text("The speaker also checks for firmware updates by itself every few hours and can install them while idle. Updates only start here after you confirm. This app never resets, reboots or reconfigures the speaker's network.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .alert(updateAlertTitle, isPresented: $confirmingUpdate) {
+            Button("Update") { model.installFirmwareUpdate() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The speaker downloads and installs the update, then restarts. Playback stops and the speaker can't be reached for a few minutes. Keep it plugged in until it's back.")
+        }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
@@ -160,6 +191,44 @@ struct SettingsView: View {
         case .searching: return "Searching…"
         case .offline(let reason): return reason
         }
+    }
+
+    private var updateAlertTitle: String {
+        let version = model.firmwareStatus?.availableVersion.map(shortFirmwareVersion)
+        return "Update \(model.name)\(version.map { " to \($0)" } ?? "")?"
+    }
+
+    private var firmwareStatusText: String {
+        let version = model.firmwareStatus?.availableVersion.map(shortFirmwareVersion)
+        let versionSuffix = version.map { " \($0)" } ?? ""
+        if !model.isOnline {
+            return model.firmwareActivity == .updating ? "Restarting after the update…" : "Speaker offline"
+        }
+        if model.firmwareActivity == .updating || model.firmwareInstalling {
+            if model.firmwareStatus?.state == .downloading { return "Downloading\(versionSuffix)…" }
+            if model.firmwareInstalling { return "Installing… the speaker restarts when done" }
+            return "Starting the update…"
+        }
+        if model.firmwareActivity == .checking { return "Checking…" }
+        guard let status = model.firmwareStatus else { return "Not reported by this speaker" }
+        switch status.state {
+        case .idle:
+            guard let checked = model.firmwareCheckedAt else { return "Up to date" }
+            return "Up to date · checked \(checked.formatted(date: .omitted, time: .shortened))"
+        case .checking: return "Checking…"
+        case .available: return "Update available\(versionSuffix)"
+        case .downloading: return "Downloading\(versionSuffix)…"
+        case .downloaded: return "Update downloaded\(versionSuffix)"
+        case .other(let raw): return raw
+        }
+    }
+
+    /// Download or install progress, when the speaker reports one.
+    private var firmwareProgress: Int? {
+        guard model.isOnline else { return nil }
+        if model.firmwareStatus?.state == .downloading { return model.firmwareStatus?.downloadProgress }
+        if let install = model.firmwareInstall, install.isInstalling { return install.overallProgress }
+        return nil
     }
 
     private func modelDisplay(_ code: String) -> String {

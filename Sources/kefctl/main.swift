@@ -6,13 +6,13 @@ import KEFKit
 ///     kefctl discover
 ///     kefctl <host> state | get <path> | rows <path> | volume [n] | mute [on|off]
 ///                   source [name] | control pause|next|previous | eq | eq-set <key> <value>
-///                   maxvol [n] | limit [on|off] | watch [seconds]
+///                   maxvol [n] | limit [on|off] | watch [seconds] | firmware [check]
 let usage = """
     usage: kefctl discover
            kefctl <host> state | get <path> | rows <path> | volume [n] | mute [on|off]
                          source [usb|wifi|tv|optical|coaxial|analog|bluetooth|standby]
                          control pause|next|previous | eq | eq-set <key> <value>
-                         maxvol [n] | limit [on|off] | watch [seconds]
+                         maxvol [n] | limit [on|off] | watch [seconds] | firmware [check]
     """
 
 func fail(_ message: String) -> Never {
@@ -143,6 +143,25 @@ do {
             for event in try await queue.poll(timeout: max(1, min(25, remaining))) {
                 print("\(event.type) \(event.path) = \(event.value?.compactString.prefix(160) ?? "nil")")
             }
+        }
+
+    case "firmware":
+        // Status, or `firmware check` to ask the speaker to look for an update.
+        // Installing is only offered in the app, behind a confirmation.
+        if let sub = rest.first {
+            guard sub == "check" else { fail("firmware [check]") }
+            try await client.checkForFirmwareUpdate()
+            for _ in 0..<20 {  // the speaker answers within seconds
+                try await Task.sleep(for: .seconds(1))
+                if try await !client.firmwareUpdateStatus().isBusy { break }
+            }
+        }
+        let status = try await client.firmwareUpdateStatus()
+        print("installed: \(try await client.firmwareVersion())")
+        print("update:    \(status.rawState)\(status.availableVersion.map { " \($0)" } ?? "")\(status.downloadProgress.map { $0 > 0 ? " \($0)%" : "" } ?? "")")
+        if let info = try? await client.firmwareInstallInfo() {
+            let parts = info.progress.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)%" }.joined(separator: ", ")
+            print("install:   \(info.status)\(parts.isEmpty ? "" : " (\(parts))")\(info.hasError ? " error: \(info.error ?? "")" : "")")
         }
 
     default:
