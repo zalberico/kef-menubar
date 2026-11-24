@@ -294,3 +294,66 @@ struct FirmwareTests {
         await #expect(throws: KEFError.blocked(path)) { try await client.activate(path) }
     }
 }
+
+struct SpeakerSettingsTests {
+    /// KEF Connect's tables as published by homeassistant-kef (kef_client/const.py):
+    /// (no KW1, 1 sub), (no KW1, 2), (KW1, 1), (KW1, 2) → (gain, crossover, high-pass).
+    static let reference: [SubwooferPreset: [(Double, Double, Double)?]] = [
+        .kc62: [(-1, 55, 67.5), (-7, 55, 67.5), (4, 55, 67.5), (-2, 55, 67.5)],
+        .kf92: [(-3, 55, 67.5), (-9, 55, 67.5), (2, 55, 67.5), (-4, 55, 67.5)],
+        .kube8b: [(3, 62.5, 67.5), (-3, 62.5, 67.5), (2, 62.5, 67.5), (-4, 62.5, 67.5)],
+        .kube10b: [(1, 55, 67.5), (-5, 55, 67.5), (0, 55, 67.5), (-6, 55, 67.5)],
+        .kube12b: [(-1, 52.5, 65), (-7, 52.5, 65), (-2, 52.5, 65), (-8, 52.5, 65)],
+        .kube15mie: [(0, 57.5, 65), (-6, 57.5, 65), (-1, 57.5, 65), (-7, 57.5, 65)],
+        .t2: [(-1, 62.5, 67.5), (-7, 62.5, 67.5), nil, nil],
+    ]
+
+    @Test func presetTableMatchesKEFConnect() {
+        for preset in SubwooferPreset.allCases {
+            let rows = Self.reference[preset]!
+            for (index, (kw1, count)) in [(false, 1), (false, 2), (true, 1), (true, 2)].enumerated() {
+                let values = preset.values(kw1: kw1, count: count)
+                if let expected = rows[index] {
+                    #expect(values == .init(gain: expected.0, crossover: expected.1, highPass: expected.2), "\(preset) \(kw1) \(count)")
+                } else {
+                    #expect(values == nil, "\(preset) \(kw1) \(count)")
+                }
+            }
+            #expect(preset.values(kw1: false, count: 0) == nil)
+            #expect(preset.values(kw1: false, count: 3) == nil)
+        }
+    }
+
+    /// A tweaked KC62 profile (crossover moved to 47.5 Hz) goes back to the KC62 defaults,
+    /// with everything else untouched and the result valid.
+    @Test func applyingKC62RestoresItsDefaults() throws {
+        let json = try JSON(parsing: #"{"phaseCorrection":true,"wallModeSetting":0,"trebleAmount":0,"subwooferPolarity":"normal","isKW1":false,"subEnableStereo":false,"subwooferCount":1,"deskMode":true,"balance":0,"subwooferPreset":"kc62","isExpertMode":false,"wallMounted":false,"deskModeSetting":-3,"dialogueMode":false,"profileId":"P","subwooferOut":true,"wallMode":false,"soundProfile":"default","highPassModeFreq":67.5,"audioPolarity":"normal","wirelessSub":"none","profileName":"Subwoofer","subwooferGain":-1,"subOutLPFreq":47.5,"highPassMode":true,"isEqMode":false,"bassExtension":"less"}"#)
+        let profile = try EqProfile(json: json)
+        #expect(profile.subwooferPreset == .kc62)
+        #expect(!profile.isAtPresetDefaults)
+
+        let restored = try #require(profile.applying(.kc62))
+        #expect(restored.double(.subOutLPFreq) == 55)
+        #expect(restored.double(.subwooferGain) == -1)
+        #expect(restored.double(.highPassModeFreq) == 67.5)
+        #expect(restored.isAtPresetDefaults)
+        try restored.validate()
+        for key in profile.raw.map(\.key) where !["subOutLPFreq", "subwooferGain", "highPassModeFreq", "subwooferPreset"].contains(key) {
+            #expect(restored.raw[key] == profile.raw[key], "\(key) changed")
+        }
+
+        let kube = try #require(profile.applying(.kube12b))
+        #expect(kube.string(.subwooferPreset) == "kube12b" && kube.double(.subOutLPFreq) == 52.5 && kube.double(.highPassModeFreq) == 65)
+        try kube.validate()
+    }
+
+    @Test func ecoNeedsTheDefaultWakeSource() {
+        #expect(StandbyMode.eco.isAllowed(wakeRaw: "wakeup_default"))
+        #expect(StandbyMode.eco.isAllowed(wakeRaw: nil))  // speaker without a wake setting
+        #expect(!StandbyMode.eco.isAllowed(wakeRaw: "tv"))
+        #expect(!StandbyMode.eco.isAllowed(wakeRaw: "somethingNew"))  // unknown is not the default
+        #expect(StandbyMode.thirtyMinutes.isAllowed(wakeRaw: "tv"))
+        #expect(WakeSource.options(for: Source.lsxII) == [.automatic, .bluetooth, .usb, .optical, .analog, .tv])
+        #expect(WakeSource.options(for: [.wifi, .tv]) == [.automatic, .tv])
+    }
+}

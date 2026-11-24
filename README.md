@@ -42,10 +42,15 @@ through KEF's servers, and there are no third-party dependencies.
   volume overlay. Holding a volume key repeats.
 - **Live updates:** changes from the remote, KEF Connect, AirPlay or anything else show up
   within a second
+- **Subwoofer presets:** pick your KEF sub model (KC62, KF92, Kube…) and get KEF's default
+  gain, crossover and high-pass, or restore them after tweaking
+- **Speaker settings:** name, auto standby (ECO, 30, 60 minutes, never), wake source,
+  switch to TV when it turns on, startup volume (one level or per input), volume limit,
+  standby light, startup sound, remote on/off and volume step
 - **Firmware updates:** see the installed version, check for updates on demand, and
   install one after a confirmation. The panel tells you when an update is available.
-- **Settings:** Bonjour discovery or a fixed IP address, shortcut volume step, the
-  speaker's maximum volume limit, launch at login
+- **App settings:** Bonjour discovery or a fixed IP address, shortcut volume step and
+  overlay, launch at login
 - **Native and light:** SwiftUI, light and dark mode, no Dock icon, about 2 MB
 
 The menu bar icon is a little bookshelf speaker with KEF's Uni-Q driver, not Apple's
@@ -104,7 +109,12 @@ new level, and you can turn it off in Settings.
 
 The speaker keeps a separate **volume and EQ for each input**, and the app follows that.
 Switching from USB to TV gives you TV's own level and EQ. Edits apply to the input you're
-on.
+on, including **Sub model** › **Restore**, which puts the sub gain, crossover and speaker
+high-pass back to KEF's defaults for your subwoofer.
+
+**Settings…** has two tabs. **General** covers the app itself: which speaker, the keyboard
+shortcuts and launch at login. **Speaker** covers settings stored on the speaker: name,
+standby and wake, startup volume, volume limit, lights, the remote and firmware.
 
 ## Command line: `kefctl`
 
@@ -124,20 +134,25 @@ $K 192.168.1.20 control pause      # pause | next | previous
 $K 192.168.1.20 eq                 # current input's EQ profile and allowed ranges
 $K 192.168.1.20 eq-set trebleAmount -1
 $K 192.168.1.20 watch 60           # print live events for 60 s (default 30)
+$K 192.168.1.20 settings           # standby, wake source, startup volume, lights, remote
+$K 192.168.1.20 name "Desk"        # rename the speaker
 $K 192.168.1.20 firmware           # installed version and update status
 $K 192.168.1.20 firmware check     # ask the speaker to look for an update (installing is app-only)
 ```
 
 ## FAQ
 
-**Do I still need KEF Connect?** Only for initial setup (Wi-Fi, pairing). Firmware updates
-are in **Settings › Firmware**: **Check Now** asks the speaker to look for one, and
+**Do I still need KEF Connect?** Only for initial setup and network changes (Wi-Fi,
+pairing), and for its streaming-service browsing. Everything on KEF Connect's settings
+screens that a desktop speaker needs is under **Settings › Speaker**, and firmware updates
+are there too: **Check Now** asks the speaker to look for one, and
 **Update…** installs it after you confirm. The speaker then restarts and is unreachable for
 a few minutes. It also checks by itself every few hours and can install updates while
 idle, so you may never need the button.
 
-**Is it safe to point at my speakers?** The app reads state and changes everyday settings:
-volume, mute, input, playback, EQ and the volume limit. It can also ask the speaker to
+**Is it safe to point at my speakers?** The app reads state and changes the same everyday
+settings KEF Connect does: volume, mute, input, playback, EQ, the volume limit and the
+speaker settings above. It can also ask the speaker to
 check for firmware and, only after you confirm, install an update. The client library
 refuses destructive paths outright, whatever calls it: factory reset, reboot, network
 setup, pairing wipes and DSP restore (`KEFSafety` in `Sources/KEFKit/Paths.swift`).
@@ -181,6 +196,14 @@ What we found on the LSX II on firmware 3.1.141:
   plays, so on/off follows `physicalSource`.
 - Errors come back as HTTP 500 with a JSON body. An expired event queue is an HTTP 400
   with plain text.
+- Speaker settings are plain values under `settings:/kef/host/` (`standbyMode`,
+  `wakeUpSource`, `standbyDefaultVol`, `defaultVolumeGlobal`, `disableFrontStandbyLED`,
+  `startupTone`, `remote/remoteIR`, `volumeStep`…). A per-input startup volume goes
+  through KEF Connect's `hostlink:defaultVolume/set` action instead. The same action with
+  no input is accepted but changes nothing, so the all-inputs level is written directly.
+  The app reads each startup level back after writing it. Picking a sub model in KEF Connect
+  also rewrites the profile's sub gain, crossover and high-pass from per-model tables
+  (they depend on a KW1 wireless kit and the number of subs).
 - Firmware updates follow KEF Connect: activating `firmwareupdate:checkForUpdate` makes
   `firmwareupdate:updateStatus` report `newUpdateAvailable` with the version, and
   activating `firmwareupdate:downloadNewUpdate` downloads and installs it (progress in

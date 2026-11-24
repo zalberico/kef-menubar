@@ -235,4 +235,86 @@ struct TransportTests {
         #expect(String(decoding: posts[0].body!, as: UTF8.self) == #"{"path":"firmwareupdate:downloadNewUpdate","role":"activate","value":{}}"#)
         #expect(Self.verify(posts[0]))
     }
+    // MARK: Speaker settings
+
+    @Test func speakerSettingsAreReadAndWrittenWithTheirTypes() async throws {
+        let values: [String: String] = [
+            "standbyMode": #"{"type":"kefStandbyMode","kefStandbyMode":"standby_30mins"}"#,
+            "wakeUpSource": #"{"type":"kefWakeUpSource","kefWakeUpSource":"wakeup_default"}"#,
+            "standbyDefaultVol": #"{"type":"bool_","bool_":true}"#,
+            "advancedStandbyDefaultVol": #"{"type":"bool_","bool_":false}"#,
+            "defaultVolumeGlobal": #"{"type":"i32_","i32_":30}"#,
+            "disableFrontStandbyLED": #"{"type":"bool_","bool_":true}"#,
+            "startupTone": #"{"type":"bool_","bool_":false}"#,
+            "remoteIR": #"{"type":"bool_","bool_":true}"#,
+            "volumeStep": #"{"type":"i16_","i16_":2}"#,
+        ]
+        let usbStartup = Locked(25)  // what the fake speaker stores for defaultVolumeUSB
+        StubProtocol.install { seen in
+            if Self.isAddUser(seen) { return (200, "") }
+            if seen.method == "POST" {
+                let body = try JSON(parsing: String(decoding: seen.body ?? Data(), as: UTF8.self))
+                if body["path"]?.string == "hostlink:defaultVolume/set",
+                   let settings = body["value"]?["kefDefaultVolumeSettings"],
+                   settings["kefPhysicalSource"]?.string == "usb", let level = settings["defaultVolume"]?.int {
+                    usbStartup.withLock { $0 = level }
+                }
+                return (200, "{}")
+            }
+            let path = URLComponents(string: seen.url)?.queryItems?.first { $0.name == "path" }?.value ?? ""
+            let name = String(path.split(separator: "/").last ?? "")
+            if path == "settings:/deviceName" { return (200, #"[{"type":"string_","string_":"LSX II"}]"#) }
+            if name == "defaultVolumeUSB" { return (200, "[{\"type\":\"i32_\",\"i32_\":\(usbStartup.withLock { $0 })}]") }
+            guard let value = values[name] else { return (500, #"{"error":{"message":"Node does not exist"}}"#) }
+            return (200, "[\(value)]")
+        }
+        let client = makeClient(.https)
+        let settings = await client.speakerSettings(inputs: [.usb, .wifi])
+        #expect(settings.standbyMode == .thirtyMinutes && settings.wakeSource == .automatic)
+        #expect(settings.startupVolumeEnabled == true && settings.startupVolumePerInput == false)
+        #expect(settings.startupVolume == 30 && settings.startupVolumes == [.usb: 25])
+        #expect(settings.standbyLight == false)  // stored as disableFrontStandbyLED = true
+        #expect(settings.startupTone == false && settings.remoteEnabled == true && settings.remoteVolumeStep == 2)
+        #expect(settings.autoSwitchToTV == nil)  // missing on this "speaker"
+
+        try await client.setStandbyMode(.sixtyMinutes)
+        try await client.setStandbyLight(true)
+        try await client.setStartupVolume(40, for: .usb)
+        try await client.setRemoteVolumeStep(3)
+        try await client.setDeviceName("  Desk  ")
+        let bodies = StubProtocol.seen.filter { $0.method == "POST" && !Self.isAddUser($0) }.map { String(decoding: $0.body!, as: UTF8.self) }
+        #expect(bodies == [
+            #"{"path":"settings:/kef/host/standbyMode","role":"value","value":{"type":"kefStandbyMode","kefStandbyMode":"standby_60mins"}}"#,
+            #"{"path":"settings:/kef/host/disableFrontStandbyLED","role":"value","value":{"type":"bool_","bool_":false}}"#,
+            #"{"path":"hostlink:defaultVolume/set","role":"activate","value":{"type":"kefDefaultVolumeSettings","kefDefaultVolumeSettings":{"kefPhysicalSource":"usb","defaultVolume":40}}}"#,
+            #"{"path":"settings:/kef/host/volumeStep","role":"value","value":{"type":"i16_","i16_":3}}"#,
+            #"{"path":"settings:/deviceName","role":"value","value":{"type":"string_","string_":"Desk"}}"#,
+        ])
+    }
+
+    /// A speaker that doesn't store the startup volume is an error, never a silent success.
+    @Test func startupVolumeIsReadBack() async throws {
+        StubProtocol.install { seen in
+            if Self.isAddUser(seen) { return (200, "") }
+            return seen.method == "POST" ? (200, "{}") : (200, #"[{"type":"i32_","i32_":30}]"#)
+        }
+        let client = makeClient(.https)
+        try await client.setStartupVolume(30)  // stored: fine
+        await #expect(throws: KEFError.self) { try await client.setStartupVolume(20) }  // still 30
+        let post = try #require(StubProtocol.seen.first { $0.method == "POST" && !Self.isAddUser($0) })
+        #expect(String(decoding: post.body!, as: UTF8.self) == #"{"path":"settings:/kef/host/defaultVolumeGlobal","role":"value","value":{"type":"i32_","i32_":30}}"#)
+        #expect(KEFSafety.isBlocked(KEFPath.startupVolumeSet))  // generic writes stay refused
+    }
+
+    @Test func invalidSpeakerSettingsAreRefusedBeforeSending() async {
+        StubProtocol.install { _ in (200, "{}") }
+        let client = makeClient(.https)
+        await #expect(throws: KEFError.self) { try await client.setDeviceName("   ") }
+        await #expect(throws: KEFError.self) { try await client.setDeviceName(String(repeating: "x", count: 65)) }
+        await #expect(throws: KEFError.self) { try await client.setStartupVolume(101) }
+        await #expect(throws: KEFError.self) { try await client.setStartupVolume(-1, for: .usb) }
+        await #expect(throws: KEFError.self) { try await client.setRemoteVolumeStep(0) }
+        await #expect(throws: KEFError.self) { try await client.setStartupVolume(10, for: .standby) }
+        #expect(StubProtocol.seen.isEmpty)
+    }
 }

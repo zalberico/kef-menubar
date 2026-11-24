@@ -389,6 +389,9 @@ private struct SoundControls: View {
 
             if eq.hasSubwoofer {
                 Divider().padding(.vertical, 2)
+                if model.offersSubwooferPresets {
+                    SubwooferPresetRow(eq: eq)
+                }
                 ValueSlider(title: "Sub crossover", value: eq.double(.subOutLPFreq) ?? 80, range: model.range(.subOutLPFreq),
                             format: Fmt.hertz) { v in model.updateEQ { $0.set(.subOutLPFreq, v) } }
                 ToggleSlider(title: "Speaker high-pass", key: .highPassMode, settingKey: .highPassModeFreq, eq: eq, format: Fmt.hertz)
@@ -413,6 +416,44 @@ private struct SoundControls: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// The sub model (KEF Connect's presets) and a way back to its default gain, crossover and
+/// high-pass after manual tweaks.
+private struct SubwooferPresetRow: View {
+    @Environment(SpeakerModel.self) private var model
+    let eq: EqProfile
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LabeledRow("Sub model") {
+                Picker("Sub model", selection: Binding(
+                    get: { eq.string(.subwooferPreset) ?? "" },
+                    set: { raw in if let preset = SubwooferPreset(rawValue: raw) { model.applySubwooferPreset(preset) } })
+                ) {
+                    ForEach(SubwooferPreset.allCases) { Text($0.title).tag($0.rawValue) }
+                    if eq.subwooferPreset == nil {
+                        Text("Other").tag(eq.string(.subwooferPreset) ?? "")
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+            }
+            if let preset = eq.subwooferPreset, let values = eq.presetValues(preset), !eq.isAtPresetDefaults {
+                HStack(spacing: 6) {
+                    Text("Defaults: \(Fmt.signedDB(values.gain)), \(Fmt.hertz(values.crossover)), high-pass \(Fmt.hertz(values.highPass))")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 4)
+                    Button("Restore") { model.applySubwooferPreset(preset) }
+                        .controlSize(.small)
+                        .help("Set the sub gain, crossover and speaker high-pass back to the \(preset.title) defaults")
+                }
+            }
         }
     }
 }

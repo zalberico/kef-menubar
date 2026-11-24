@@ -13,6 +13,7 @@ let usage = """
                          source [usb|wifi|tv|optical|coaxial|analog|bluetooth|standby]
                          control pause|next|previous | eq | eq-set <key> <value>
                          maxvol [n] | limit [on|off] | watch [seconds] | firmware [check]
+                         name [new name] | settings | startupvol [level [input]]
     """
 
 func fail(_ message: String) -> Never {
@@ -144,6 +145,37 @@ do {
                 print("\(event.type) \(event.path) = \(event.value?.compactString.prefix(160) ?? "nil")")
             }
         }
+
+    case "name":
+        if !rest.isEmpty { try await client.setDeviceName(rest.joined(separator: " ")) }
+        print(try await client.deviceName())
+
+    case "settings":
+        let model = try? await client.modelName()
+        let s = await client.speakerSettings(inputs: Source.inputs(forModel: model))
+        func show(_ value: Any?) -> String { value.map { "\($0)" } ?? "-" }
+        print("auto standby:    \(show(s.standbyMode?.title))")
+        print("wake source:     \(show(s.wakeSource?.title))")
+        print("switch to TV:    \(show(s.autoSwitchToTV))")
+        print("startup volume:  \(show(s.startupVolumeEnabled)) (per input: \(show(s.startupVolumePerInput)), all: \(show(s.startupVolume)))")
+        let perInput = s.startupVolumes.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue) \($0.value)" }
+        if !perInput.isEmpty { print("  per input:     \(perInput.joined(separator: ", "))") }
+        print("standby light:   \(show(s.standbyLight))")
+        print("startup sound:   \(show(s.startupTone))")
+        print("remote:          \(show(s.remoteEnabled)) (volume step \(show(s.remoteVolumeStep)))")
+
+    case "startupvol":
+        // startupvol [level [input]]: the level the speaker returns to after standby
+        // (used only while "reset volume after standby" is on).
+        if let text = rest.first {
+            guard let level = Int(text) else { fail("startupvol <0-100> [input]") }
+            let source = rest.count > 1 ? Source(rawValue: rest[1]) : nil
+            if rest.count > 1, source == nil { fail("unknown input \(rest[1])") }
+            try await client.setStartupVolume(level, for: source)
+        }
+        let s = await client.speakerSettings(inputs: Source.inputs(forModel: try? await client.modelName()))
+        print("all inputs: \(s.startupVolume.map(String.init) ?? "-")  enabled: \(s.startupVolumeEnabled.map(String.init) ?? "-")")
+        print(s.startupVolumes.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue) \($0.value)" }.joined(separator: ", "))
 
     case "firmware":
         // Status, or `firmware check` to ask the speaker to look for an update.

@@ -47,6 +47,12 @@ final class SpeakerModel {
     /// previous input's values would be wrong (or loud).
     private(set) var inputSettling = false
 
+    /// The speaker's own settings (Settings › Speaker); `nil` until loaded.
+    private(set) var speakerSettings: SpeakerSettings?
+    /// The last attempt to read them got nothing (offer a retry).
+    private(set) var speakerSettingsFailed = false
+    @ObservationIgnored private var settingsWriter: Task<Void, Never>?
+
     // Firmware (see Firmware.swift in KEFKit).
     enum FirmwareActivity: Equatable { case idle, checking, updating }
     /// `nil` until read, or if the speaker doesn't report it.
@@ -94,6 +100,8 @@ final class SpeakerModel {
     /// `speakerStatus` is not reliable for this: after a wake it can stay "standby"
     /// while the speaker plays (seen on LSX II 3.1.141, with powermanager "online").
     var isOn: Bool { isOnline && source != nil && source != .standby }
+    /// The inputs this model has.
+    var inputs: [Source] { Source.inputs(forModel: modelName) }
     var volumeCeiling: Int { volumeLimited ? max(1, maximumVolume) : 100 }
     /// The speaker is installing firmware (it restarts at the end).
     var firmwareInstalling: Bool { status == .firmwareUpgrade || firmwareInstall?.isInstalling == true }
@@ -151,6 +159,8 @@ final class SpeakerModel {
                 if self.host != host {  // another address: forget what the old one reported
                     modelName = nil
                     firmware = nil
+                    speakerSettings = nil
+                    speakerSettingsFailed = false
                     firmwareStatus = nil
                     firmwareInstall = nil
                     firmwareCheckedAt = nil
@@ -327,7 +337,7 @@ final class SpeakerModel {
             case KEFPath.speakerStatus:
                 if let v = value.string { status = SpeakerStatus(rawValue: v) }
             case KEFPath.deviceName:
-                if let v = value.string { name = v }
+                if let v = value.string { name = v; preferences.lastSpeakerName = v }
             case KEFPath.maximumVolume:
                 if let v = value.int { maximumVolume = v }
             case KEFPath.volumeLimit:
@@ -651,5 +661,137 @@ final class SpeakerModel {
         updateStartedFrom = nil
         updateStartedAt = nil
         updateSpeaker = nil
+    }
+
+    // MARK: Speaker settings
+
+    /// (Re)load the speaker's settings, e.g. when Settings opens.
+    func loadSpeakerSettings() {
+        guard let client, isOnline else { return }
+        speakerSettingsFailed = false
+        Task { await reloadSpeakerSettings(client) }
+    }
+
+    /// Keeps the previous settings if nothing could be read.
+    private func reloadSpeakerSettings(_ client: KEFClient) async {
+        let settings = await client.speakerSettings(inputs: inputs)
+        guard self.client?.host == client.host else { return }
+        if settings.isEmpty {
+            speakerSettingsFailed = true
+        } else {
+            speakerSettings = settings
+            speakerSettingsFailed = false
+        }
+    }
+
+    /// Apply a change locally, write it, and re-read the settings if the write fails.
+    /// Writes go out one at a time in the order they were made, so the last choice wins.
+    private func changeSettings(_ change: (inout SpeakerSettings) -> Void,
+                                write: @escaping @Sendable (KEFClient) async throws -> Void) {
+        guard isOnline, let client, var settings = speakerSettings else { return }
+        change(&settings)
+        speakerSettings = settings
+        let previous = settingsWriter
+        settingsWriter = Task {
+            await previous?.value
+            guard self.client?.host == client.host else { return }
+            do {
+                try await write(client)
+            } catch {
+                report(error)
+                await reloadSpeakerSettings(client)
+            }
+        }
+    }
+
+    func rename(_ newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isOnline, !trimmed.isEmpty, trimmed != name else { return }
+        let previous = name
+        name = trimmed
+        Task {
+            guard let client else { return }
+            do {
+                try await client.setDeviceName(trimmed)
+                preferences.lastSpeakerName = trimmed
+            } catch {
+                report(error)
+                if name == trimmed { name = previous }
+            }
+        }
+    }
+
+    /// ECO standby only works with the default wake source, like in KEF Connect.
+    func setStandbyMode(_ mode: StandbyMode) {
+        let needsDefaultWake = !mode.isAllowed(wakeRaw: speakerSettings?.wakeSourceRaw)
+        changeSettings({
+            $0.standbyMode = mode
+            if needsDefaultWake { $0.wakeSourceRaw = WakeSource.automatic.rawValue }
+        }, write: { client in
+            if needsDefaultWake { try await client.setWakeSource(.automatic) }
+            try await client.setStandbyMode(mode)
+        })
+    }
+
+    func setWakeSource(_ source: WakeSource) {
+        let leavesEco = speakerSettings?.standbyMode == .eco && !StandbyMode.eco.isAllowed(wakeRaw: source.rawValue)
+        changeSettings({
+            $0.wakeSourceRaw = source.rawValue
+            if leavesEco { $0.standbyMode = .thirtyMinutes }
+        }, write: { client in
+            if leavesEco { try await client.setStandbyMode(.thirtyMinutes) }
+            try await client.setWakeSource(source)
+        })
+    }
+
+    func setAutoSwitchToTV(_ on: Bool) {
+        changeSettings({ $0.autoSwitchToTV = on }, write: { try await $0.setAutoSwitchToTV(on) })
+    }
+
+    func setStartupVolumeEnabled(_ on: Bool) {
+        changeSettings({ $0.startupVolumeEnabled = on }, write: { try await $0.setStartupVolumeEnabled(on) })
+    }
+
+    func setStartupVolumePerInput(_ on: Bool) {
+        changeSettings({ $0.startupVolumePerInput = on }, write: { try await $0.setStartupVolumePerInput(on) })
+    }
+
+    /// Startup volume for all inputs (`source == nil`) or one input, never above the volume limit.
+    func setStartupVolume(_ level: Int, for source: Source? = nil) {
+        let level = min(max(level, 0), volumeCeiling)
+        changeSettings({
+            if let source { $0.startupVolumes[source] = level } else { $0.startupVolume = level }
+        }, write: { try await $0.setStartupVolume(level, for: source) })
+    }
+
+    func setStandbyLight(_ on: Bool) {
+        changeSettings({ $0.standbyLight = on }, write: { try await $0.setStandbyLight(on) })
+    }
+
+    func setStartupTone(_ on: Bool) {
+        changeSettings({ $0.startupTone = on }, write: { try await $0.setStartupTone(on) })
+    }
+
+    func setRemoteEnabled(_ on: Bool) {
+        changeSettings({ $0.remoteEnabled = on }, write: { try await $0.setRemoteEnabled(on) })
+    }
+
+    func setRemoteVolumeStep(_ step: Int) {
+        let step = min(max(step, 1), 10)
+        changeSettings({ $0.remoteVolumeStep = step }, write: { try await $0.setRemoteVolumeStep(step) })
+    }
+
+    // MARK: Subwoofer preset
+
+    /// Sub model presets are offered where KEF Connect's tables are known to apply.
+    var offersSubwooferPresets: Bool {
+        SubwooferPreset.supportedModels.contains(modelName ?? "") && eq?.hasSubwoofer == true
+    }
+
+    /// Choose a sub model and apply its gain, crossover and high-pass (current input's profile).
+    func applySubwooferPreset(_ preset: SubwooferPreset) {
+        updateEQ { profile in
+            if let applied = profile.applying(preset) { profile = applied }
+        }
     }
 }
