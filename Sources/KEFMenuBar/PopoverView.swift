@@ -407,7 +407,9 @@ private struct SoundControls: View {
                 BoolRow(title: "Subwoofer output", key: .subwooferOut, eq: eq)
             }
 
-            Text("Applies to the \(model.source?.displayName ?? "current") input's profile. The speaker keeps one per input.")
+            Text(model.isOn
+                 ? "Applies to the \(model.source?.displayName ?? "current") input's profile. The speaker keeps one per input."
+                 : "Turn the speaker on to change its sound. The speaker keeps one profile per input.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

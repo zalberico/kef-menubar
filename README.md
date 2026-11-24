@@ -19,6 +19,10 @@ volume.
 It talks to the speaker's own local API, the same one KEF Connect uses. Nothing goes
 through KEF's servers, and there are no third-party dependencies.
 
+<p align="center">
+  <img src="docs/panel.png" width="354" alt="The KEF Menu Bar panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
+</p>
+
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
 > Other W2-platform models should work but are untested. Reports and PRs are welcome.
 >
