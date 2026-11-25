@@ -12,8 +12,18 @@ struct RemoteApp: App {
     @State private var services: Services
 
     init() {
-        let model = Self.makeModel()
-        let isDemo = false
+        let model: SpeakerModel
+        var isDemo = false
+        #if DEBUG
+        if DemoSpeaker.isEnabled {
+            model = DemoSpeaker.makeModel()
+            isDemo = true
+        } else {
+            model = Self.makeModel()
+        }
+        #else
+        model = Self.makeModel()
+        #endif
         let network = LocalNetworkMonitor()
         network.onAllowed = { [weak model] in model?.retry() }
         self.model = model
