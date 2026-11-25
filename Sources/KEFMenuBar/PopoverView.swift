@@ -1,3 +1,4 @@
+import KEFAppCore
 import KEFKit
 import SwiftUI
 
@@ -109,7 +110,9 @@ private struct PowerButton: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: model.togglePower) {
+        Button {
+            model.togglePower()
+        } label: {
             Image(systemName: "power")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(model.isOn ? Color.white : Color.primary.opacity(0.75))
@@ -133,7 +136,9 @@ private struct VolumeRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: model.toggleMute) {
+            Button {
+                model.toggleMute()
+            } label: {
                 Image(systemName: model.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(model.muted ? Color.accentColor : .secondary)
@@ -166,16 +171,9 @@ private struct InputGrid: View {
     @Environment(SpeakerModel.self) private var model
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
-    /// The model's inputs, plus whatever input the speaker reports if it isn't one of them.
-    private var sources: [Source] {
-        var sources = Source.inputs(forModel: model.modelName)
-        if model.isOn, let current = model.source, !sources.contains(current) { sources.append(current) }
-        return sources
-    }
-
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(sources) { source in
+            ForEach(model.pickerInputs) { source in
                 InputTile(source: source, selected: model.isOn && model.source == source) {
                     model.select(source)
                 }
@@ -191,7 +189,9 @@ private struct InputTile: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            action()
+        } label: {
             VStack(spacing: 5) {
                 Image(systemName: source.symbol)
                     .font(.system(size: 15, weight: .medium))
@@ -217,21 +217,6 @@ private struct InputTile: View {
 }
 
 extension Source {
-    var symbol: String {
-        switch self {
-        case .usb: "macmini.fill"
-        case .wifi: "airplay.audio"
-        case .tv: "tv"
-        case .optical: "rays"
-        case .analog: "waveform.path"
-        case .bluetooth: "dot.radiowaves.left.and.right"
-        case .coaxial: "cable.coaxial"
-        case .standby: "power"
-        }
-    }
-
-    var shortName: String { self == .wifi ? "Wi-Fi" : displayName }
-
     var helpText: String {
         switch self {
         case .usb: "USB-C (this Mac)"
@@ -251,7 +236,7 @@ private struct NowPlayingView: View {
         HStack(spacing: 12) {
             Group {
                 if let artwork = model.artwork {
-                    Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                    Image(decorative: artwork, scale: 1).resizable().aspectRatio(contentMode: .fill)
                 } else {
                     Image(systemName: "music.note")
                         .font(.system(size: 18))
@@ -294,7 +279,9 @@ private struct TransportButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            action()
+        } label: {
             Image(systemName: symbol)
                 .font(.system(size: large ? 16 : 12, weight: .semibold))
                 .frame(width: 26, height: 26)
@@ -316,7 +303,7 @@ private struct SubwooferRow: View {
         ValueSlider(
             title: "Subwoofer", systemImage: "circle.circle.fill",
             value: model.eq?.double(.subwooferGain) ?? 0, range: model.range(.subwooferGain),
-            format: Fmt.signedDB
+            format: { Fmt.signedDB($0) }
         ) { value in model.updateEQ { $0.set(.subwooferGain, value) } }
     }
 }
@@ -363,7 +350,7 @@ private struct SoundControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ValueSlider(title: "Treble", value: eq.double(.trebleAmount) ?? 0, range: model.range(.trebleAmount),
-                        format: Fmt.signedDB) { v in model.updateEQ { $0.set(.trebleAmount, v) } }
+                        format: { Fmt.signedDB($0) }) { v in model.updateEQ { $0.set(.trebleAmount, v) } }
 
             LabeledRow("Bass extension") {
                 Picker("Bass extension", selection: Binding(
@@ -383,7 +370,7 @@ private struct SoundControls: View {
             ToggleSlider(title: "Wall mode", key: .wallMode, settingKey: .wallModeSetting, eq: eq)
 
             ValueSlider(title: "Balance", value: eq.double(.balance) ?? 0, range: model.range(.balance),
-                        format: Fmt.balance) { v in model.updateEQ { $0[.balance] = .int(Int64(v)) } }
+                        format: { Fmt.balance($0) }) { v in model.updateEQ { $0[.balance] = .int(Int64(v)) } }
 
             BoolRow(title: "Phase correction", key: .phaseCorrection, eq: eq)
 
@@ -395,10 +382,10 @@ private struct SoundControls: View {
                     SubwooferPresetRow(eq: eq)
                 }
                 ValueSlider(title: "Sub crossover", value: eq.double(.subOutLPFreq) ?? 80, range: model.range(.subOutLPFreq),
-                            format: Fmt.hertz) { v in model.updateEQ { $0.set(.subOutLPFreq, v) } }
+                            format: { Fmt.hertz($0) }) { v in model.updateEQ { $0.set(.subOutLPFreq, v) } }
             }
             // Always reachable: with no sub it should normally be off (full-range speakers).
-            ToggleSlider(title: "Speaker high-pass", key: .highPassMode, settingKey: .highPassModeFreq, eq: eq, format: Fmt.hertz)
+            ToggleSlider(title: "Speaker high-pass", key: .highPassMode, settingKey: .highPassModeFreq, eq: eq, format: { Fmt.hertz($0) })
             if eq.hasSubwoofer {
                 LabeledRow("Sub polarity") {
                     Picker("Sub polarity", selection: Binding(
@@ -459,7 +446,7 @@ private struct SubwooferPresetRow: View {
             LabeledRow("Sub model") {
                 Picker("Sub model", selection: Binding(
                     get: { eq.string(.subwooferPreset) ?? "" },
-                    set: { raw in if let preset = SubwooferPreset(rawValue: raw) { model.applySubwooferPreset(preset) } })
+                    set: { raw in if let preset = SubwooferPreset(rawValue: raw) { _ = model.applySubwooferPreset(preset) } })
                 ) {
                     ForEach(SubwooferPreset.allCases) { Text($0.title).tag($0.rawValue) }
                     if eq.subwooferPreset == nil {
@@ -477,7 +464,7 @@ private struct SubwooferPresetRow: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Spacer(minLength: 4)
-                    Button("Restore") { model.applySubwooferPreset(preset) }
+                    Button("Restore") { _ = model.applySubwooferPreset(preset) }
                         .controlSize(.small)
                         .help("Set the sub gain, crossover and speaker high-pass back to the \(preset.title) defaults")
                 }
@@ -530,7 +517,7 @@ private struct ToggleSlider: View {
     let key: EqKey
     let settingKey: EqKey
     let eq: EqProfile
-    var format: (Double) -> String = Fmt.signedDB
+    var format: (Double) -> String = { Fmt.signedDB($0) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -576,22 +563,6 @@ private struct ValueSlider: View {
     }
 }
 
-enum Fmt {
-    static func signedDB(_ v: Double) -> String {
-        let number = v.rounded() == v ? String(Int(v)) : String(format: "%g", v)
-        return v > 0 ? "+\(number) dB" : (v == 0 ? "0 dB" : "\(number.replacingOccurrences(of: "-", with: "−")) dB")
-    }
-
-    static func hertz(_ v: Double) -> String {
-        v.rounded() == v ? "\(Int(v)) Hz" : String(format: "%.1f Hz", v)
-    }
-
-    static func balance(_ v: Double) -> String {
-        let steps = Int(v)
-        return steps == 0 ? "Center" : (steps < 0 ? "L \(-steps)" : "R \(steps)")
-    }
-}
-
 // MARK: - Offline & footer
 
 private struct OfflineView: View {
@@ -610,7 +581,7 @@ private struct OfflineView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
-                Button("Retry Now") { model.reconnect(rediscover: model.preferences.hostMode == .automatic) }
+                Button("Retry Now") { model.retry() }
                     .controlSize(.small)
                     .padding(.top, 2)
             } else {
@@ -635,7 +606,7 @@ private struct FooterView: View {
                     .foregroundStyle(.orange)
                     .lineLimit(2)
             }
-            if model.firmwareActivity == .updating || (model.isOnline && model.firmwareInstalling) {
+            if model.showsFirmwareUpdating {
                 Label("Updating firmware. Keep the speaker plugged in; it restarts when done.",
                       systemImage: "arrow.triangle.2.circlepath")
                     .font(.system(size: 11))

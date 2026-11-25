@@ -1,12 +1,14 @@
-import AppKit
+import CoreGraphics
+import Foundation
+import ImageIO
 import KEFKit
 import Observation
 import os
 
 /// Live state of the speaker, kept in sync through the event queue, and every command.
 @MainActor @Observable
-final class SpeakerModel {
-    enum Connection: Equatable {
+public final class SpeakerModel {
+    public enum Connection: Equatable, Sendable {
         case searching
         case connecting(String)
         case online
@@ -20,48 +22,55 @@ final class SpeakerModel {
         KEFPath.eqProfileV2,
     ]
 
-    let preferences: Preferences
+    public let preferences: Preferences
 
-    private(set) var connection: Connection = .searching
-    private(set) var host: String?
-    private(set) var isSecure: Bool?
-    private(set) var name = "KEF Speaker"
-    private(set) var modelName: String?
-    private(set) var firmware: String?
-    private(set) var status: SpeakerStatus?
-    private(set) var source: Source?
-    private(set) var lastSource: Source = .usb
-    private(set) var volume = 0
-    private(set) var muted = false
-    private(set) var maximumVolume = 100
-    private(set) var volumeLimited = false
-    private(set) var player = PlayerState()
-    private(set) var artwork: NSImage?
-    private(set) var eq: EqProfile?
-    private(set) var eqRanges = EqRange.defaults
-    private(set) var discovered: [DiscoveredSpeaker] = []
-    private(set) var isDiscovering = false
-    private(set) var lastError: String?
+    public private(set) var connection: Connection = .searching
+    public private(set) var host: String?
+    public private(set) var isSecure: Bool?
+    public private(set) var name = "KEF Speaker"
+    public private(set) var modelName: String?
+    public private(set) var firmware: String?
+    public private(set) var status: SpeakerStatus?
+    public private(set) var source: Source?
+    public private(set) var lastSource: Source = .usb
+    public private(set) var volume = 0
+    public private(set) var muted = false
+    public private(set) var maximumVolume = 100
+    public private(set) var volumeLimited = false
+    public private(set) var player = PlayerState()
+    /// The current track's artwork, downsampled to at most ``artworkMaxPixelSize``.
+    public private(set) var artwork: CGImage?
+    public private(set) var eq: EqProfile?
+    public private(set) var eqRanges = EqRange.defaults
+    public private(set) var discovered: [DiscoveredSpeaker] = []
+    public private(set) var isDiscovering = false
+    public private(set) var lastError: String?
     /// True for a moment after an input change, until the new input's own volume and EQ
     /// have been read back: the speaker keeps both per input, so writes based on the
     /// previous input's values would be wrong (or loud).
-    private(set) var inputSettling = false
+    public private(set) var inputSettling = false
+    /// The values shown come from an earlier session with this speaker (they are kept while
+    /// suspended and reconnecting, so the app can show them dimmed instead of nothing).
+    public private(set) var hasCachedState = false
+    /// ``suspend()`` was called and ``resume()`` hasn't been since.
+    public private(set) var isSuspended = false
 
     /// The speaker's own settings (Settings › Speaker); `nil` until loaded.
-    private(set) var speakerSettings: SpeakerSettings?
+    public private(set) var speakerSettings: SpeakerSettings?
     /// The last attempt to read them got nothing (offer a retry).
-    private(set) var speakerSettingsFailed = false
+    public private(set) var speakerSettingsFailed = false
     @ObservationIgnored private var settingsWriter: Task<Void, Never>?
+    @ObservationIgnored private var settingsWritesInFlight = 0
 
     // Firmware (see Firmware.swift in KEFKit).
-    enum FirmwareActivity: Equatable { case idle, checking, updating }
+    public enum FirmwareActivity: Equatable, Sendable { case idle, checking, updating }
     /// `nil` until read, or if the speaker doesn't report it.
-    private(set) var firmwareStatus: FirmwareUpdateStatus?
-    private(set) var firmwareInstall: FirmwareInstallInfo?
-    private(set) var firmwareActivity: FirmwareActivity = .idle
-    private(set) var firmwareCheckedAt: Date?
+    public private(set) var firmwareStatus: FirmwareUpdateStatus?
+    public private(set) var firmwareInstall: FirmwareInstallInfo?
+    public private(set) var firmwareActivity: FirmwareActivity = .idle
+    public private(set) var firmwareCheckedAt: Date?
     /// Outcome of the last check or update, shown in Settings.
-    private(set) var firmwareNotice: String?
+    public private(set) var firmwareNotice: String?
 
     @ObservationIgnored private var client: KEFClient?
     @ObservationIgnored private var runTask: Task<Void, Never>?
@@ -83,11 +92,33 @@ final class SpeakerModel {
     @ObservationIgnored private var updateStartedFrom: String?
     @ObservationIgnored private var updateStartedAt: ContinuousClock.Instant?
     @ObservationIgnored private var updateSpeaker: String?
+    /// Bumped by every ``start()`` and ``suspend()``: a suspend that sees another value after
+    /// an await gives up, so a quick resume is never undone by the end of an older suspend.
+    @ObservationIgnored private var lifecycleGeneration = 0
+    /// Discoveries running at once (the Scan button and the connection loop can overlap).
+    @ObservationIgnored private var discoveriesInFlight = 0
 
-    private let log = Logger(subsystem: "KEFMenuBar", category: "speaker")
+    @ObservationIgnored private let makeClient: @Sendable (String) -> KEFClient
+    @ObservationIgnored private let discoverSpeakers: @Sendable () async -> [DiscoveredSpeaker]
+    @ObservationIgnored private let log: Logger
 
-    init(preferences: Preferences) {
+    /// Artwork is decoded to at most this many pixels on its longest side.
+    public static let artworkMaxPixelSize = 600
+
+    /// - Parameters:
+    ///   - logSubsystem: the unified-logging subsystem of the model's messages.
+    ///   - makeClient: builds the client for an address (tests pass a stubbed transport).
+    ///   - discover: finds the speakers on the network.
+    public init(
+        preferences: Preferences,
+        logSubsystem: String = "KEFMenuBar",
+        makeClient: @escaping @Sendable (String) -> KEFClient = { KEFClient(host: $0) },
+        discover: @escaping @Sendable () async -> [DiscoveredSpeaker] = { await KEFDiscovery.discover() }
+    ) {
         self.preferences = preferences
+        self.makeClient = makeClient
+        discoverSpeakers = discover
+        log = Logger(subsystem: logSubsystem, category: "speaker")
         needsDiscovery = preferences.lastHost.isEmpty
         if !preferences.lastSpeakerName.isEmpty { name = preferences.lastSpeakerName }
         if let source = Source(rawValue: preferences.lastSource), source != .standby { lastSource = source }
@@ -95,23 +126,33 @@ final class SpeakerModel {
 
     // MARK: Derived state
 
-    var isOnline: Bool { connection == .online }
+    public var isOnline: Bool { connection == .online }
     /// On/standby follows the physical source, like pykefcontrol's `is_on()`.
     /// `speakerStatus` is not reliable for this: after a wake it can stay "standby"
     /// while the speaker plays (seen on LSX II 3.1.141, with powermanager "online").
-    var isOn: Bool { isOnline && source != nil && source != .standby }
+    public var isOn: Bool { isOnline && source != nil && source != .standby }
     /// The inputs this model has.
-    var inputs: [Source] { Source.inputs(forModel: modelName) }
-    var volumeCeiling: Int { volumeLimited ? max(1, maximumVolume) : 100 }
+    public var inputs: [Source] { Source.inputs(forModel: modelName) }
+    public var volumeCeiling: Int { VolumePolicy.ceiling(maximum: maximumVolume, limited: volumeLimited) }
     /// The speaker is installing firmware (it restarts at the end).
-    var firmwareInstalling: Bool { status == .firmwareUpgrade || firmwareInstall?.isInstalling == true }
-    var firmwareUpdateAvailable: Bool {
+    public var firmwareInstalling: Bool { status == .firmwareUpgrade || firmwareInstall?.isInstalling == true }
+    public var firmwareUpdateAvailable: Bool {
         isOnline && firmwareActivity == .idle && !firmwareInstalling && firmwareStatus?.isUpdateAvailable == true
     }
 
-    var showsNowPlaying: Bool { isOn && (source == .wifi || source == .bluetooth) && player.hasMetadata }
+    /// The inputs to offer: the model's, plus whatever input the speaker reports if it isn't one of them.
+    public var pickerInputs: [Source] {
+        var sources = Source.inputs(forModel: modelName)
+        if isOn, let current = source, !sources.contains(current) { sources.append(current) }
+        return sources
+    }
 
-    var statusText: String {
+    /// The product name (e.g. "LSX II"), `nil` until the speaker reported its model.
+    public var modelDisplayName: String? { modelName.map { SpeakerProduct.displayName(forCode: $0) } }
+
+    public var showsNowPlaying: Bool { isOn && (source == .wifi || source == .bluetooth) && player.hasMetadata }
+
+    public var statusText: String {
         switch connection {
         case .searching: return "Looking for speaker…"
         case .connecting(let host): return "Connecting to \(host)…"
@@ -127,13 +168,14 @@ final class SpeakerModel {
 
     // MARK: Connection lifecycle
 
-    func start() {
+    public func start() {
         guard runTask == nil else { return }
+        lifecycleGeneration += 1
         runTask = Task { await run() }
     }
 
     /// Drop the connection and start again (after the speaker settings changed).
-    func reconnect(rediscover: Bool = true) {
+    public func reconnect(rediscover: Bool = true) {
         runTask?.cancel()
         runTask = nil
         if let client { Task { await client.transport.close() } }
@@ -142,6 +184,79 @@ final class SpeakerModel {
         retryDelay = .seconds(1)
         connection = .searching
         start()
+    }
+
+    /// Stop talking to the speaker (the iPhone app going to the background), keeping every
+    /// value shown, the address and what discovery found. Volume, EQ and settings writes
+    /// already made get a moment to go out first. ``resume()`` connects again.
+    public func suspend() async {
+        lifecycleGeneration += 1
+        let generation = lifecycleGeneration
+        isSuspended = true
+        runTask?.cancel()  // also ends the long poll
+        runTask = nil
+        settleTask?.cancel()
+        if let host { connection = .connecting(host) }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while volumeWriter != nil || eqWriter != nil || settingsWritesInFlight > 0, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+            guard generation == lifecycleGeneration else { return }
+        }
+        guard generation == lifecycleGeneration, let client else { return }
+        self.client = nil
+        await client.transport.close()
+    }
+
+    /// Connect again after ``suspend()``. With a known address this goes straight back to it
+    /// (no Bonjour scan) unless the last attempt had already asked for one.
+    public func resume() {
+        isSuspended = false
+        guard runTask == nil else { return }
+        needsDiscovery = needsDiscovery || preferences.lastHost.isEmpty
+        retryDelay = .seconds(1)
+        start()
+    }
+
+    /// Retry now (the offline view): in automatic mode, look for the speaker again too.
+    public func retry() {
+        reconnect(rediscover: preferences.hostMode == .automatic)
+    }
+
+    /// Switch between finding the speaker automatically and a manual address. Switching to
+    /// manual with no address yet keeps the speaker connected to; that address is returned
+    /// so a text field can show it.
+    @discardableResult
+    public func setHostMode(_ mode: Preferences.HostMode) -> String? {
+        var filled: String?
+        if mode == .manual, preferences.manualHost.isEmpty, let host {
+            preferences.manualHost = host
+            filled = host
+        }
+        preferences.hostMode = mode
+        reconnect()
+        return filled
+    }
+
+    /// Find the speaker automatically (Bonjour).
+    public func useAutomatic() {
+        setHostMode(.automatic)
+    }
+
+    /// Connect to a typed address (blank text is ignored).
+    public func useManualHost(_ text: String) {
+        let host = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return }
+        preferences.manualHost = host
+        if preferences.hostMode != .manual { preferences.hostMode = .manual }
+        reconnect(rediscover: false)
+    }
+
+    /// Use one of the discovered speakers.
+    public func choose(_ speaker: DiscoveredSpeaker) {
+        preferences.preferredSpeakerID = speaker.id
+        preferences.lastHost = speaker.host
+        if preferences.hostMode != .automatic { preferences.hostMode = .automatic }
+        reconnect(rediscover: false)
     }
 
     private func run() async {
@@ -155,8 +270,12 @@ final class SpeakerModel {
             }
             if client?.host != host {
                 if let client { await client.transport.close() }
-                client = KEFClient(host: host)
+                // A run cancelled meanwhile (reconnect, suspend) must not replace the client
+                // of the run that took over.
+                if Task.isCancelled { return }
+                client = makeClient(host)
                 if self.host != host {  // another address: forget what the old one reported
+                    hasCachedState = false
                     modelName = nil
                     firmware = nil
                     speakerSettings = nil
@@ -223,10 +342,14 @@ final class SpeakerModel {
         }
     }
 
-    func discover() async {
+    public func discover() async {
+        discoveriesInFlight += 1
         isDiscovering = true
-        discovered = await KEFDiscovery.discover()
-        isDiscovering = false
+        let found = await discoverSpeakers()
+        discovered = found
+        discoveriesInFlight -= 1
+        // Overlapping scans: "Scanning…" lasts until the last one is done.
+        if discoveriesInFlight == 0 { isDiscovering = false }
     }
 
     /// One connected session: subscribe, read everything, then follow events until an error.
@@ -237,8 +360,10 @@ final class SpeakerModel {
         try await refreshAll(client)
         try Task.checkCancellation()
         connection = .online
+        hasCachedState = true
         retryDelay = .seconds(1)
         isSecure = await client.transport.isSecure
+        rememberSpeaker(client)
         eqRanges = await client.eqRanges()
         let firmwareWatch = Task { await watchFirmware(client) }
         defer { firmwareWatch.cancel() }
@@ -273,18 +398,20 @@ final class SpeakerModel {
     /// In automatic mode, make sure the speaker at this address is still the chosen one
     /// (DHCP can hand its old IP to another KEF speaker). Speaker IDs are MAC addresses.
     private func verifyIdentity(_ client: KEFClient) async throws {
-        let preferred = Self.normalizedMAC(preferences.preferredSpeakerID)
-        guard preferences.hostMode == .automatic, preferred.count == 12,
-              let mac = try? await client.getValue(KEFPath.macAddress).string
-        else { return }
-        if Self.normalizedMAC(mac) != preferred {
+        if await SpeakerIdentity.isDifferentSpeaker(client, hostMode: preferences.hostMode,
+                                                    preferredID: preferences.preferredSpeakerID) {
             needsDiscovery = true
             throw KEFError.connection("A different speaker answered at \(client.host)")
         }
     }
 
-    private static func normalizedMAC(_ text: String) -> String {
-        text.lowercased().filter(\.isHexDigit)
+    /// Keep what the other targets (widgets, intents) and the speaker list need. Never logged.
+    private func rememberSpeaker(_ client: KEFClient) {
+        preferences.lastIsSecure = isSecure
+        if let modelName { preferences.lastModelCode = modelName }
+        let id = preferences.hostMode == .automatic && !preferences.preferredSpeakerID.isEmpty
+            ? preferences.preferredSpeakerID : client.host
+        preferences.remember(SavedSpeaker(id: id, name: name, host: client.host, modelCode: modelName))
     }
 
     private func refreshAll(_ client: KEFClient) async throws {
@@ -411,15 +538,31 @@ final class SpeakerModel {
         artwork = nil
         guard let url, let client else { return }
         Task {
-            let image = await Self.loadArtwork(url, client: client)
+            let image = await Self.loadArtwork(url, client: client, maxPixelSize: Self.artworkMaxPixelSize)
             if artworkURL == url { artwork = image }
         }
+    }
+
+    /// A stable key for the current artwork (a hash of its URL), `nil` without artwork.
+    public var artworkKey: String? {
+        guard artwork != nil, let artworkURL else { return nil }
+        return Self.artworkKey(for: artworkURL)
+    }
+
+    /// FNV-1a of the URL: stable across launches, and the URL itself is never stored.
+    public nonisolated static func artworkKey(for url: URL) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in url.absoluteString.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 16)
     }
 
     /// Artwork comes from the speaker or from the streaming service. Use the speaker's
     /// session (KEF CA for the speaker, system trust for anything else); recent firmware
     /// no longer serves port 80, so speaker http URLs are retried on HTTPS 4430.
-    private static func loadArtwork(_ url: URL, client: KEFClient) async -> NSImage? {
+    private nonisolated static func loadArtwork(_ url: URL, client: KEFClient, maxPixelSize: Int) async -> CGImage? {
         var candidates = [url]
         if url.scheme == "http", url.host == client.host, url.port == nil || url.port == 80,
            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -430,12 +573,25 @@ final class SpeakerModel {
         }
         for candidate in candidates {
             if let (data, response) = try? await client.transport.session.data(from: candidate),
-               (response as? HTTPURLResponse)?.statusCode == 200, let image = NSImage(data: data)
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let image = decodeImage(data, maxPixelSize: maxPixelSize)
             {
                 return image
             }
         }
         return nil
+    }
+
+    /// Decode and downsample in one go, applying the EXIF orientation like `NSImage` did.
+    public nonisolated static func decodeImage(_ data: Data, maxPixelSize: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     // MARK: Commands
@@ -465,9 +621,9 @@ final class SpeakerModel {
         }
     }
 
-    func setVolume(_ value: Int) {
+    public func setVolume(_ value: Int) {
         guard !inputSettling else { return }
-        let value = min(max(value, 0), volumeCeiling)
+        let value = VolumePolicy.clamp(value, ceiling: volumeCeiling)
         volume = value
         volumeHoldUntil = .now + .milliseconds(800)
         pendingVolume = (value, sourceGeneration)
@@ -483,20 +639,20 @@ final class SpeakerModel {
         }
     }
 
-    func stepVolume(by delta: Int) {
+    public func stepVolume(by delta: Int) {
         guard !inputSettling else { return }
         if muted && delta > 0 { setMuted(false) }
         setVolume(volume + delta)
     }
 
-    func setMuted(_ value: Bool) {
+    public func setMuted(_ value: Bool) {
         muted = value
         send { try await $0.setMuted(value) }
     }
 
-    func toggleMute() { setMuted(!muted) }
+    public func toggleMute() { setMuted(!muted) }
 
-    func select(_ newSource: Source) {
+    public func select(_ newSource: Source) {
         setSource(newSource)
         let generation = sourceGeneration
         Task {
@@ -506,27 +662,27 @@ final class SpeakerModel {
         }
     }
 
-    func togglePower() {
+    public func togglePower() {
         select(isOn ? .standby : lastSource)
     }
 
-    func control(_ command: PlayerCommand) {
+    public func control(_ command: PlayerCommand) {
         if command == .pause { player.playback = player.isPlaying ? .paused : .playing }
         send { try await $0.control(command) }
     }
 
-    func setMaximumVolume(_ value: Int) {
+    public func setMaximumVolume(_ value: Int) {
         maximumVolume = value
         send { try await $0.setMaximumVolume(value) }
     }
 
-    func setVolumeLimited(_ value: Bool) {
+    public func setVolumeLimited(_ value: Bool) {
         volumeLimited = value
         send { try await $0.setVolumeLimited(value) }
     }
 
     /// Change the current input's EQ profile (whole-profile write, coalesced).
-    func updateEQ(_ change: (inout EqProfile) -> Void) {
+    public func updateEQ(_ change: (inout EqProfile) -> Void) {
         guard !inputSettling, var profile = eq else { return }
         change(&profile)
         guard profile != eq else { return }
@@ -547,7 +703,7 @@ final class SpeakerModel {
         }
     }
 
-    func range(_ key: EqKey) -> EqRange { eqRanges[key] ?? EqRange.defaults[key] ?? EqRange(0, 1, step: 1) }
+    public func range(_ key: EqKey) -> EqRange { eqRanges[key] ?? EqRange.defaults[key] ?? EqRange(0, 1, step: 1) }
     // MARK: Firmware
 
     /// Reads the firmware state at once, then every 15 minutes, or every 2 s while a
@@ -576,14 +732,62 @@ final class SpeakerModel {
         return newStatus != nil
     }
 
+    /// The firmware status line in Settings.
+    public var firmwareStatusText: String {
+        let version = firmwareStatus?.availableVersion.map { shortFirmwareVersion($0) }
+        let versionSuffix = version.map { " \($0)" } ?? ""
+        if !isOnline {
+            return firmwareActivity == .updating ? "Restarting after the update…" : "Speaker offline"
+        }
+        if firmwareActivity == .updating || firmwareInstalling {
+            if firmwareStatus?.state == .downloading { return "Downloading\(versionSuffix)…" }
+            if firmwareInstalling { return "Installing… the speaker restarts when done" }
+            return "Starting the update…"
+        }
+        if firmwareActivity == .checking { return "Checking…" }
+        guard let status = firmwareStatus else { return "Not reported by this speaker" }
+        switch status.state {
+        case .idle:
+            guard let checked = firmwareCheckedAt else { return "Up to date" }
+            return "Up to date · checked \(checked.formatted(date: .omitted, time: .shortened))"
+        case .checking: return "Checking…"
+        case .available: return "Update available\(versionSuffix)"
+        case .downloading: return "Downloading\(versionSuffix)…"
+        case .downloaded: return "Update downloaded\(versionSuffix)"
+        case .other(let raw): return raw
+        }
+    }
+
+    /// Download or install progress (0–100), when the speaker reports one.
+    public var firmwareProgress: Int? {
+        guard isOnline else { return nil }
+        if firmwareStatus?.state == .downloading { return firmwareStatus?.downloadProgress }
+        if let install = firmwareInstall, install.isInstalling { return install.overallProgress }
+        return nil
+    }
+
+    /// An update is being installed or followed (the banner in the popover).
+    public var showsFirmwareUpdating: Bool {
+        firmwareActivity == .updating || (isOnline && firmwareInstalling)
+    }
+
+    /// Title of the confirmation shown before ``installFirmwareUpdate()``.
+    public var firmwareUpdateAlertTitle: String {
+        let version = firmwareStatus?.availableVersion.map { shortFirmwareVersion($0) }
+        return "Update \(name)\(version.map { " to \($0)" } ?? "")?"
+    }
+
+    /// Message of that confirmation.
+    public static let firmwareUpdateAlertMessage = "The speaker downloads and installs the update, then restarts. Playback stops and the speaker can't be reached for a few minutes. Keep it plugged in until it's back."
+
     /// Who an update belongs to: the chosen speaker's MAC in automatic mode, else its address.
     private func speakerIdentity(host: String) -> String {
-        let mac = Self.normalizedMAC(preferences.preferredSpeakerID)
+        let mac = SpeakerIdentity.normalizedMAC(preferences.preferredSpeakerID)
         return preferences.hostMode == .automatic && mac.count == 12 ? mac : host
     }
 
     /// Ask the speaker to look for new firmware (it stays in standby if it was).
-    func checkForFirmwareUpdate() {
+    public func checkForFirmwareUpdate() {
         guard let client, isOnline, firmwareActivity == .idle, !firmwareInstalling else { return }
         firmwareActivity = .checking
         firmwareNotice = nil
@@ -619,7 +823,7 @@ final class SpeakerModel {
 
     /// Have the speaker download and install the update it reported. Only call after the
     /// user confirmed: the speaker stops playing and restarts.
-    func installFirmwareUpdate() {
+    public func installFirmwareUpdate() {
         guard let client, firmwareUpdateAvailable else { return }
         firmwareActivity = .updating
         firmwareNotice = nil
@@ -666,7 +870,7 @@ final class SpeakerModel {
     // MARK: Speaker settings
 
     /// (Re)load the speaker's settings, e.g. when Settings opens.
-    func loadSpeakerSettings() {
+    public func loadSpeakerSettings() {
         guard let client, isOnline else { return }
         speakerSettingsFailed = false
         Task { await reloadSpeakerSettings(client) }
@@ -692,7 +896,9 @@ final class SpeakerModel {
         change(&settings)
         speakerSettings = settings
         let previous = settingsWriter
+        settingsWritesInFlight += 1
         settingsWriter = Task {
+            defer { settingsWritesInFlight -= 1 }
             await previous?.value
             guard self.client?.host == client.host else { return }
             do {
@@ -704,7 +910,13 @@ final class SpeakerModel {
         }
     }
 
-    func rename(_ newName: String) {
+    /// Whether `newName` can be sent: trimmed, not empty, different, at most 64 characters.
+    public func canRename(_ newName: String) -> Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isOnline && !trimmed.isEmpty && trimmed != name && trimmed.count <= 64
+    }
+
+    public func rename(_ newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isOnline, !trimmed.isEmpty, trimmed != name else { return }
         let previous = name
@@ -722,7 +934,7 @@ final class SpeakerModel {
     }
 
     /// ECO standby only works with the default wake source, like in KEF Connect.
-    func setStandbyMode(_ mode: StandbyMode) {
+    public func setStandbyMode(_ mode: StandbyMode) {
         let needsDefaultWake = !mode.isAllowed(wakeRaw: speakerSettings?.wakeSourceRaw)
         changeSettings({
             $0.standbyMode = mode
@@ -733,7 +945,7 @@ final class SpeakerModel {
         })
     }
 
-    func setWakeSource(_ source: WakeSource) {
+    public func setWakeSource(_ source: WakeSource) {
         let leavesEco = speakerSettings?.standbyMode == .eco && !StandbyMode.eco.isAllowed(wakeRaw: source.rawValue)
         changeSettings({
             $0.wakeSourceRaw = source.rawValue
@@ -744,39 +956,39 @@ final class SpeakerModel {
         })
     }
 
-    func setAutoSwitchToTV(_ on: Bool) {
+    public func setAutoSwitchToTV(_ on: Bool) {
         changeSettings({ $0.autoSwitchToTV = on }, write: { try await $0.setAutoSwitchToTV(on) })
     }
 
-    func setStartupVolumeEnabled(_ on: Bool) {
+    public func setStartupVolumeEnabled(_ on: Bool) {
         changeSettings({ $0.startupVolumeEnabled = on }, write: { try await $0.setStartupVolumeEnabled(on) })
     }
 
-    func setStartupVolumePerInput(_ on: Bool) {
+    public func setStartupVolumePerInput(_ on: Bool) {
         changeSettings({ $0.startupVolumePerInput = on }, write: { try await $0.setStartupVolumePerInput(on) })
     }
 
     /// Startup volume for all inputs (`source == nil`) or one input, never above the volume limit.
-    func setStartupVolume(_ level: Int, for source: Source? = nil) {
-        let level = min(max(level, 0), volumeCeiling)
+    public func setStartupVolume(_ level: Int, for source: Source? = nil) {
+        let level = VolumePolicy.clamp(level, ceiling: volumeCeiling)
         changeSettings({
             if let source { $0.startupVolumes[source] = level } else { $0.startupVolume = level }
         }, write: { try await $0.setStartupVolume(level, for: source) })
     }
 
-    func setStandbyLight(_ on: Bool) {
+    public func setStandbyLight(_ on: Bool) {
         changeSettings({ $0.standbyLight = on }, write: { try await $0.setStandbyLight(on) })
     }
 
-    func setStartupTone(_ on: Bool) {
+    public func setStartupTone(_ on: Bool) {
         changeSettings({ $0.startupTone = on }, write: { try await $0.setStartupTone(on) })
     }
 
-    func setRemoteEnabled(_ on: Bool) {
+    public func setRemoteEnabled(_ on: Bool) {
         changeSettings({ $0.remoteEnabled = on }, write: { try await $0.setRemoteEnabled(on) })
     }
 
-    func setRemoteVolumeStep(_ step: Int) {
+    public func setRemoteVolumeStep(_ step: Int) {
         let step = min(max(step, 1), 10)
         changeSettings({ $0.remoteVolumeStep = step }, write: { try await $0.setRemoteVolumeStep(step) })
     }
@@ -784,14 +996,17 @@ final class SpeakerModel {
     // MARK: Subwoofer preset
 
     /// Sub model presets are offered where KEF Connect's tables are known to apply.
-    var offersSubwooferPresets: Bool {
+    public var offersSubwooferPresets: Bool {
         SubwooferPreset.supportedModels.contains(modelName ?? "") && eq?.hasSubwoofer == true
     }
 
     /// Choose a sub model and apply its gain, crossover and high-pass (current input's profile).
-    func applySubwooferPreset(_ preset: SubwooferPreset) {
-        updateEQ { profile in
-            if let applied = profile.applying(preset) { profile = applied }
-        }
+    /// Returns whether anything changed (`false` while the input settles, without a profile,
+    /// when the preset doesn't apply, or when the profile already has its values).
+    @discardableResult
+    public func applySubwooferPreset(_ preset: SubwooferPreset) -> Bool {
+        guard !inputSettling, let profile = eq, let applied = profile.applying(preset), applied != profile else { return false }
+        updateEQ { $0 = applied }
+        return true
     }
 }

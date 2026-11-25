@@ -1,3 +1,4 @@
+import KEFAppCore
 import KEFKit
 import ServiceManagement
 import SwiftUI
@@ -38,12 +39,7 @@ private struct GeneralSettingsTab: View {
                     get: { prefs.hostMode },
                     set: { mode in
                         // Switching to manual keeps the speaker we are connected to.
-                        if mode == .manual, prefs.manualHost.isEmpty, let host = model.host {
-                            prefs.manualHost = host
-                            manualHost = host
-                        }
-                        prefs.hostMode = mode
-                        model.reconnect()
+                        if let host = model.setHostMode(mode) { manualHost = host }
                     })
                 ) {
                     Text("Find automatically (Bonjour)").tag(Preferences.HostMode.automatic)
@@ -54,10 +50,10 @@ private struct GeneralSettingsTab: View {
                     discoveredList
                 } else {
                     HStack {
-                        TextField("IP address", text: $manualHost, prompt: Text("192.168.1.78"))
+                        TextField("IP address", text: $manualHost, prompt: Text("IP address"))
                             .textFieldStyle(.roundedBorder)
-                            .onSubmit(applyManualHost)
-                        Button("Connect", action: applyManualHost)
+                            .onSubmit { applyManualHost() }
+                        Button("Connect") { applyManualHost() }
                             .disabled(manualHost.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
@@ -124,11 +120,7 @@ private struct GeneralSettingsTab: View {
                     }
                     Spacer()
                     if speaker.host != model.host {
-                        Button("Use") {
-                            prefs.preferredSpeakerID = speaker.id
-                            prefs.lastHost = speaker.host
-                            model.reconnect(rediscover: false)
-                        }
+                        Button("Use") { model.choose(speaker) }
                     }
                 }
             }
@@ -145,7 +137,7 @@ private struct GeneralSettingsTab: View {
         switch model.connection {
         case .online:
             let scheme = model.isSecure == false ? "HTTP" : "HTTPS"
-            var parts = ["\(model.modelName.map(modelDisplay) ?? model.name) at \(model.host ?? "?") (\(scheme))"]
+            var parts = ["\(model.modelDisplayName ?? model.name) at \(model.host ?? "?") (\(scheme))"]
             if let firmware = model.firmware { parts.append("Firmware \(firmware.split(separator: ".").prefix(3).joined(separator: "."))") }
             return parts.joined(separator: "\n")
         case .connecting(let host): return "Connecting to \(host)…"
@@ -154,15 +146,8 @@ private struct GeneralSettingsTab: View {
         }
     }
 
-    private func modelDisplay(_ code: String) -> String {
-        ["SP4041": "LSX II", "SP4077": "LSX II LT", "SP4025": "LS50 Wireless II", "SP4033": "LS60 Wireless"][code] ?? code
-    }
-
     private func applyManualHost() {
-        let host = manualHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { return }
-        prefs.manualHost = host
-        model.reconnect(rediscover: false)
+        model.useManualHost(manualHost)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
