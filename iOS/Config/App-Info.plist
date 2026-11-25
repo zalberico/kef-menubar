@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>$(APP_DISPLAY_NAME)</string>
+	<key>AppGroupIdentifier</key>
+	<string>$(APP_GROUP_ID)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Speakeasy uses your local network to find your KEF speaker and control it directly.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_kef-info._tcp</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Older KEF firmware only serves plain HTTP on port 80, and the speaker is
+		     addressed by IP (which NSAllowsLocalNetworking does not cover). HTTPS to the
+		     speaker is still pinned to the KEF CA. Must be the only ATS key: Apple
+		     ignores it when NSAllowsLocalNetworking is also present. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
