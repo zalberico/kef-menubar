@@ -22,5 +22,6 @@ let package = Package(
         // Small CLI used to exercise KEFKit against a real speaker.
         .executableTarget(name: "kefctl", dependencies: ["KEFKit"]),
         .testTarget(name: "KEFKitTests", dependencies: ["KEFKit"]),
+        .testTarget(name: "KEFAppCoreTests", dependencies: ["KEFAppCore", "KEFKit"]),
     ]
 )
