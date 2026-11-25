@@ -387,8 +387,10 @@ private struct SoundControls: View {
 
             BoolRow(title: "Phase correction", key: .phaseCorrection, eq: eq)
 
+            Divider().padding(.vertical, 2)
+            SubwooferCountRow(eq: eq)
+
             if eq.hasSubwoofer {
-                Divider().padding(.vertical, 2)
                 if model.offersSubwooferPresets {
                     SubwooferPresetRow(eq: eq)
                 }
@@ -416,6 +418,29 @@ private struct SoundControls: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// How many wired subwoofers this input's profile drives. The sub level and sub settings
+/// only show once there is at least one.
+private struct SubwooferCountRow: View {
+    @Environment(SpeakerModel.self) private var model
+    let eq: EqProfile
+
+    var body: some View {
+        let maxCount = max(1, Int(model.range(.subwooferCount).max.rounded()))
+        LabeledRow("Subwoofers") {
+            Picker("Subwoofers", selection: Binding(
+                get: { eq.subwooferCount },
+                set: { n in model.updateEQ { $0.subwooferCount = n } })
+            ) {
+                Text("None").tag(0)
+                ForEach(1...maxCount, id: \.self) { Text("\($0)").tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
         }
     }
 }
