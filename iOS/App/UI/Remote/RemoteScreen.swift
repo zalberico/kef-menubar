@@ -72,10 +72,14 @@ struct RemoteScreen: View {
             .toolbar {
                 if phase.showsSpeakerChrome {
                     ToolbarItem(placement: .principal) { StatusTitle(phase: phase) }
-                    if #available(iOS 27, *) {
-                        ToolbarItem(placement: .topBarPinnedTrailing) { PowerButton() }
-                    } else {
-                        ToolbarItem(placement: .topBarTrailing) { PowerButton() }
+                    // One power control at a time: in standby the hero's Turn On button is the
+                    // way back, so the toolbar's standby button only shows while the speaker is on.
+                    if model.isOn {
+                        if #available(iOS 27, *) {
+                            ToolbarItem(placement: .topBarPinnedTrailing) { PowerButton() }
+                        } else {
+                            ToolbarItem(placement: .topBarTrailing) { PowerButton() }
+                        }
                     }
                 }
             }
