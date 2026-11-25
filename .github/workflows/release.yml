@@ -44,6 +44,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The image's default Xcode can be older than the one the app is developed with, and
+      # Swift 6.3 (Xcode 26) crashes compiling SettingsView. Use the newest stable Xcode.
+      - name: Select Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc' | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+
       - name: Version
         id: version
         run: |
