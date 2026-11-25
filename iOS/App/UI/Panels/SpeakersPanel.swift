@@ -57,7 +57,7 @@ struct SpeakersPanel: View {
                     .foregroundStyle(.secondary)
             }
 
-            #if DEBUG
+            #if DEBUG || PROBE
             Section {
                 NavigationLink("Diagnostics", value: UIState.Route.diagnostics)
             }

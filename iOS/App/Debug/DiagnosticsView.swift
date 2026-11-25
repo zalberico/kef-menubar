@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || PROBE
 import KEFAppCore
 import SwiftUI
 

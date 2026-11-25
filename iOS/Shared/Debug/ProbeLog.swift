@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || PROBE
 import Foundation
 
 /// A small line log in the App Group container that the app and the extension both append

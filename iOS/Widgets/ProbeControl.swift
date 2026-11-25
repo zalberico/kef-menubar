@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || PROBE
 import AppIntents
 import SwiftUI
 import WidgetKit

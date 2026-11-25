@@ -5,7 +5,7 @@ import WidgetKit
 struct RemoteWidgetsBundle: WidgetBundle {
     var body: some Widget {
         NowPlayingWidget()
-        #if DEBUG
+        #if DEBUG || PROBE
         ProbeControl()
         #endif
     }

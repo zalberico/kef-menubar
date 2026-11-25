@@ -12,7 +12,7 @@ final class UIState {
 
     /// Screens pushed inside the panel's navigation stack.
     enum Route: Hashable, Sendable {
-        #if DEBUG
+        #if DEBUG || PROBE
         case diagnostics
         #endif
     }

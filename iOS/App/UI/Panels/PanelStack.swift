@@ -24,7 +24,7 @@ struct PanelStack: View {
                         }
                     }
                 }
-                #if DEBUG
+                #if DEBUG || PROBE
                 .navigationDestination(for: UIState.Route.self) { route in
                     RouteView(route: route)
                 }
@@ -47,7 +47,7 @@ private struct PanelContent: View {
     }
 }
 
-#if DEBUG
+#if DEBUG || PROBE
 private struct RouteView: View {
     let route: UIState.Route
 

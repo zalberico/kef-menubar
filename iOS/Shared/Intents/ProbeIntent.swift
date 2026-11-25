@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || PROBE
 import AppIntents
 
 /// Debug only: reads the speaker once from wherever the system runs it (the widget
