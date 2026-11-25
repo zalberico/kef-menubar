@@ -1,61 +1,66 @@
 import KEFAppCore
+import KEFKit
 import SwiftUI
-import WidgetKit
 
 @main
 struct RemoteApp: App {
-    /// The one live connection to the speaker, shared by every scene.
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// The one live connection to the speaker, for the app's lifetime and every scene.
     @State private var model: SpeakerModel
+    @State private var network: LocalNetworkMonitor
+    @State private var services: Services
 
     init() {
-        model = SpeakerModel(
+        let model = Self.makeModel()
+        let isDemo = false
+        let network = LocalNetworkMonitor()
+        network.onAllowed = { [weak model] in model?.retry() }
+        self.model = model
+        self.network = network
+        services = Services(model: model, isDemo: isDemo)
+    }
+
+    private static func makeModel() -> SpeakerModel {
+        SpeakerModel(
             preferences: Preferences(defaults: AppGroup.defaults()),
-            logSubsystem: Bundle.main.bundleIdentifier ?? "Speakeasy")
+            logSubsystem: AppLog.subsystem,
+            discover: {
+                AppLog.discovery.info("bonjour scan started")
+                let found = await KEFDiscovery.discover()
+                AppLog.discovery.info("bonjour scan found \(found.count) speaker(s)")
+                return found
+            })
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(networkMonitoring: !services.isDemo)
                 .environment(model)
+                .environment(network)
+                .task {
+                    model.start()
+                    services.widgetSync?.start()
+                }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            services.lifecycle.phaseChanged(to: phase)
+            network.setActive(phase == .active)
         }
     }
 }
 
-/// Starts the model, follows the app's lifecycle, and keeps the widgets' snapshot current.
-private struct RootView: View {
-    @Environment(SpeakerModel.self) private var model
-    @Environment(\.scenePhase) private var scenePhase
+/// The app-wide helpers around the model, made once.
+@MainActor
+final class Services {
+    let lifecycle: Lifecycle
+    /// `nil` in the demo, which must not overwrite the real speaker's widget snapshot.
+    let widgetSync: WidgetSync?
+    let isDemo: Bool
 
-    var body: some View {
-        RemoteView()
-            .task { model.start() }
-            .onChange(of: scenePhase) { _, phase in
-                switch phase {
-                case .background: Task { await model.suspend() }
-                case .active: if model.isSuspended { model.resume() }
-                default: break
-                }
-            }
-            .onChange(of: WidgetState(model: model)) { _, state in
-                publish(state.snapshot)
-            }
-    }
-
-    private func publish(_ snapshot: SpeakerSnapshot?) {
-        guard var snapshot, let store = AppGroup.snapshotStore else { return }
-        snapshot.updatedAt = .now
-        try? store.write(snapshot, artwork: model.artwork)
-        WidgetCenter.shared.reloadAllTimelines()
-    }
-}
-
-/// What the widgets show, compared without its timestamp so only real changes are written.
-private struct WidgetState: Equatable {
-    var snapshot: SpeakerSnapshot?
-    var hasArtwork: Bool
-
-    @MainActor init(model: SpeakerModel) {
-        snapshot = model.snapshot(at: .distantPast)
-        hasArtwork = model.artwork != nil
+    init(model: SpeakerModel, isDemo: Bool) {
+        lifecycle = Lifecycle(model: model)
+        widgetSync = isDemo ? nil : AppGroup.snapshotStore.map { WidgetSync(model: model, store: $0) }
+        self.isDemo = isDemo
     }
 }
