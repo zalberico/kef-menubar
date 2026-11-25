@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5EA000000000000000000030"
-               BuildableName = "Remote.app"
+               BuildableName = "Speakeasy.app"
                BlueprintName = "Remote"
                ReferencedContainer = "container:Remote.xcodeproj">
             </BuildableReference>
@@ -59,7 +59,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5EA000000000000000000030"
-            BuildableName = "Remote.app"
+            BuildableName = "Speakeasy.app"
             BlueprintName = "Remote"
             ReferencedContainer = "container:Remote.xcodeproj">
          </BuildableReference>
@@ -76,7 +76,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5EA000000000000000000030"
-            BuildableName = "Remote.app"
+            BuildableName = "Speakeasy.app"
             BlueprintName = "Remote"
             ReferencedContainer = "container:Remote.xcodeproj">
          </BuildableReference>

@@ -41,7 +41,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		5EA000000000000000000020 /* Remote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Remote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EA000000000000000000020 /* Speakeasy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Speakeasy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EA000000000000000000021 /* RemoteWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RemoteWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EA000000000000000000022 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		5EA000000000000000000023 /* App-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "App-Info.plist"; sourceTree = "<group>"; };
@@ -105,7 +105,7 @@
 		5EA000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5EA000000000000000000020 /* Remote.app */,
+				5EA000000000000000000020 /* Speakeasy.app */,
 				5EA000000000000000000021 /* RemoteWidgets.appex */,
 			);
 			name = Products;
@@ -151,7 +151,7 @@
 				5EA000000000000000000063 /* KEFKit */,
 			);
 			productName = Remote;
-			productReference = 5EA000000000000000000020 /* Remote.app */;
+			productReference = 5EA000000000000000000020 /* Speakeasy.app */;
 			productType = "com.apple.product-type.application";
 		};
 		5EA000000000000000000031 /* RemoteWidgets */ = {
@@ -405,7 +405,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID)";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
 			name = Debug;
@@ -429,7 +429,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID)";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
 			name = Release;
