@@ -83,7 +83,7 @@ private struct GeneralSettingsTab: View {
             }
 
             Section("General") {
-                Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
+                Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: { setLaunchAtLogin($0) }))
                 if loginStatus == .requiresApproval {
                     Text("Approve KEF Menu Bar in System Settings › General › Login Items.")
                         .font(.caption).foregroundStyle(.secondary)

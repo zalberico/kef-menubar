@@ -73,7 +73,30 @@ The Mac and the speaker must be on the same network.
 
 ## Install
 
-There's no prebuilt download yet, so you build it yourself. It takes about a minute.
+### Download
+
+1. Download the latest **KEF-Menu-Bar-….zip** from
+   [Releases](https://github.com/zalberico/kef-menubar/releases/latest) and unzip it.
+2. Move **KEF Menu Bar** to your Applications folder and open it.
+3. The release builds aren't notarized by Apple yet, so the first time you open it macOS
+   says it can't verify the app. Click **Done**, then open System Settings › Privacy &
+   Security, scroll down to the message about KEF Menu Bar and click **Open Anyway**.
+   You only have to do this once. (If you'd rather use Terminal:
+   `xattr -dr com.apple.quarantine "/Applications/KEF Menu Bar.app"`.)
+4. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
+   the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
+   Privacy & Security › Local Network.
+
+To update, download the new release and replace the app in Applications.
+
+The app finds your speaker with Bonjour. If it doesn't, open **Settings…** from the
+panel and enter the speaker's IP address. You'll find the address in KEF Connect under the
+speaker's settings, or in your router's client list. A DHCP reservation for the speaker is
+a good idea either way.
+
+### Build it yourself
+
+If you'd rather build from source, it takes about a minute.
 
 1. Install **Xcode 16 or later** from the App Store and open it once to finish setup.
 2. Make Xcode the active developer directory. The Command Line Tools alone aren't enough,
@@ -90,16 +113,22 @@ There's no prebuilt download yet, so you build it yourself. It takes about a min
    This builds **KEF Menu Bar.app**, signs it, copies it to `~/Applications` and launches
    it. The script signs with your first "Apple Development" certificate if you have one and
    ad-hoc otherwise; set `CODESIGN_IDENTITY` to override.
-4. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
-   the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
-   Privacy & Security › Local Network.
-
-The app finds your speaker with Bonjour. If it doesn't, open **Settings…** from the
-panel and enter the speaker's IP address. You'll find the address in KEF Connect under the
-speaker's settings, or in your router's client list. A DHCP reservation for the speaker is
-a good idea either way.
+4. Allow **Local Network** access on first launch, as above.
 
 To update later, run `git pull` and `scripts/build-app.sh --install` again.
+
+### Making a release
+
+Push a version tag and the [Release workflow](.github/workflows/release.yml) tests and
+builds the app, then publishes it as a GitHub Release:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The workflow ad-hoc signs the app unless the Developer ID secrets listed at the top of the
+workflow are set. With them, it signs with Developer ID and has Apple notarize the build,
+so it opens without the Open Anyway step.
 
 ## Using it
 

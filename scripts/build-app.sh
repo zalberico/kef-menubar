@@ -25,11 +25,17 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/KEFMenuBar"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Release builds stamp the version: APP_VERSION=1.2.0 BUILD_NUMBER=42 scripts/build-app.sh
+[[ -n "${APP_VERSION:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$APP/Contents/Info.plist"
+[[ -n "${BUILD_NUMBER:-}" ]] && /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Sign with the first Apple Development identity (ad-hoc if there is none).
 IDENTITY="${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ {print $2; exit}')}"
-codesign --force --options runtime --timestamp=none --sign "${IDENTITY:--}" "$APP"
+# Notarization needs a secure timestamp, so Developer ID builds get one.
+TIMESTAMP=--timestamp=none
+[[ "$IDENTITY" == "Developer ID Application"* ]] && TIMESTAMP=--timestamp
+codesign --force --options runtime "$TIMESTAMP" --sign "${IDENTITY:--}" "$APP"
 codesign --verify --strict --verbose=1 "$APP"
 echo "built $APP"
 
