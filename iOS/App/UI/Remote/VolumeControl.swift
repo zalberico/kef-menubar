@@ -155,11 +155,12 @@ private struct MuteButton: View {
                 .frame(width: 40, height: 40)
         }
         .buttonBorderShape(.circle)
-        .accessibilityLabel(muted ? "Unmute" : "Mute")
-        .accessibilityAddTraits(muted ? .isSelected : [])
+        // A toggle: VoiceOver reads "Mute, switch button, on" while muted.
+        .accessibilityLabel("Mute")
+        .accessibilityAddTraits(muted ? [.isToggle, .isSelected] : .isToggle)
 
         if muted {
-            button.buttonStyle(.glassProminent)
+            button.prominentGlassStyle()
         } else {
             button.buttonStyle(.glass)
         }

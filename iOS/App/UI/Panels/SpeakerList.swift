@@ -124,7 +124,7 @@ struct ManualHostField: View {
             Button("Connect") {
                 connect(ui.manualHostDraft)
             }
-            .buttonStyle(.glassProminent)
+            .prominentGlassStyle()
             .disabled(isBlank)
         }
     }

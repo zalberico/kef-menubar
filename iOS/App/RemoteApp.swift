@@ -24,6 +24,12 @@ struct RemoteApp: App {
         #else
         model = Self.makeModel()
         #endif
+        if AppGroup.containerURL == nil {
+            // Widgets, controls and Shortcuts would never see the speaker. Only broken
+            // signing (no App Group entitlement) gets here.
+            AppLog.lifecycle.error("App Group \(AppGroup.identifier, privacy: .public) is unavailable; widgets and intents will not see the speaker")
+            assertionFailure("App Group container is missing: check the App Group entitlement")
+        }
         let network = LocalNetworkMonitor()
         network.onAllowed = { [weak model] in model?.retry() }
         self.model = model

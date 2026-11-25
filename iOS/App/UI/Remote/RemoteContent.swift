@@ -51,7 +51,7 @@ private struct RemoteStack: View {
             ? AnyLayout(HStackLayout(alignment: .center, spacing: 28))
             : AnyLayout(VStackLayout(spacing: 18))
         stack {
-            NowPlayingHero(isLandscape: isLandscape, scrolls: scrolls)
+            NowPlayingHero(scrolls: scrolls)
             VStack(spacing: 16) {
                 VolumeControl()
                 InputChips(allowsWrapping: !isLandscape || scrolls)

@@ -2,11 +2,11 @@ import KEFAppCore
 import KEFKit
 import SwiftUI
 
-/// Artwork (or the speaker glyph), what's playing, and the transport buttons.
+/// Artwork (or the speaker glyph), what's playing, and the transport buttons (or Turn On),
+/// always stacked and centred so the layout never changes with the length of a title.
 struct NowPlayingHero: View {
-    let isLandscape: Bool
     /// Inside a scroll view (accessibility sizes): the artwork takes its width, not the
-    /// height that is left.
+    /// height that is left, and stays a thumbnail so volume starts on the first screen.
     let scrolls: Bool
 
     @Environment(SpeakerModel.self) private var model
@@ -16,39 +16,25 @@ struct NowPlayingHero: View {
         let track = model.player.track
         VStack(spacing: 16) {
             ArtworkView(artwork: showsTrack ? model.artwork : nil, glyph: model.displaysOn ? .on : .standby)
-                .frame(maxWidth: scrolls ? 280 : 400, maxHeight: scrolls ? nil : .infinity)
+                .frame(maxWidth: scrolls ? 104 : 400, maxHeight: scrolls ? nil : .infinity)
                 .layoutPriority(-1)
 
-            if !showsTrack, !(model.isOnline && !model.isOn) {
-                // Nothing beside the caption: centre it.
-                caption(showsTrack: false, track: nil, alignment: .center)
-                    .frame(maxWidth: 560)
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 12) {
-                        caption(showsTrack: showsTrack, track: track, alignment: .leading)
-                        Spacer(minLength: 0)
-                        accessory(showsTrack: showsTrack)
-                    }
-                    VStack(spacing: 12) {
-                        caption(showsTrack: showsTrack, track: track, alignment: .center)
-                        accessory(showsTrack: showsTrack)
-                    }
-                }
-                .frame(maxWidth: 560)
+            VStack(spacing: 12) {
+                caption(showsTrack: showsTrack, track: track)
+                accessory(showsTrack: showsTrack)
             }
+            .frame(maxWidth: 560)
         }
     }
 
     @ViewBuilder
-    private func caption(showsTrack: Bool, track: Track?, alignment: HorizontalAlignment) -> some View {
+    private func caption(showsTrack: Bool, track: Track?) -> some View {
         if showsTrack {
             TrackCaption(title: track?.title ?? "",
                          subtitle: [track?.artist, track?.album].compactMap { $0 }.filter { !$0.isEmpty }
-                             .joined(separator: " — "),
-                         alignment: alignment)
+                             .joined(separator: " — "))
         } else {
-            TrackCaption(title: sourceTitle, subtitle: sourceSubtitle, alignment: alignment)
+            TrackCaption(title: sourceTitle, subtitle: sourceSubtitle)
         }
     }
 
@@ -64,7 +50,7 @@ struct NowPlayingHero: View {
                 Label("Turn On (\(model.lastSource.displayName))", systemImage: "power")
                     .fontWeight(.semibold)
             }
-            .buttonStyle(.glassProminent)
+            .prominentGlassStyle()
             .controlSize(.large)
         }
     }
@@ -108,31 +94,42 @@ struct ArtworkView: View {
                     .transition(.opacity)
                 }
             }
-            .clipShape(.rect(cornerRadius: 28, style: .continuous))
+            .clipShape(ArtworkShape())
             .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
             .animation(.easeInOut(duration: 0.35), value: artwork == nil)
             .accessibilityHidden(true)
     }
 }
 
+/// A rounded square whose corners shrink with it, so small artwork (landscape, a long
+/// title) stays a rounded square rather than turning into a circle.
+private struct ArtworkShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(roundedRect: rect, cornerRadius: min(28, rect.width * 0.12), style: .continuous)
+    }
+}
+
+/// Title and subtitle, wrapping onto a second line (a third for the title at accessibility
+/// sizes) before they truncate.
 private struct TrackCaption: View {
     let title: String
     let subtitle: String
-    let alignment: HorizontalAlignment
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: alignment, spacing: 2) {
+        VStack(spacing: 2) {
             Text(title)
                 .font(.title3.weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
             if !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
         }
-        .multilineTextAlignment(alignment == .center ? .center : .leading)
+        .multilineTextAlignment(.center)
         .accessibilityElement(children: .combine)
     }
 }

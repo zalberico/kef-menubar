@@ -14,8 +14,10 @@ enum AppGroup {
         return value
     }()
 
-    /// The shared preferences suite (falls back to the standard defaults if the group is
-    /// unavailable, which only happens with broken signing).
+    /// The shared preferences suite. A missing App Group entitlement does not make this
+    /// fail: the app then writes a suite only it can read, and the extension sees nothing,
+    /// so check ``containerURL`` (the app logs an error at launch when it is `nil`). The
+    /// `.standard` fallback covers only an invalid suite name.
     static func defaults() -> UserDefaults {
         UserDefaults(suiteName: identifier) ?? .standard
     }

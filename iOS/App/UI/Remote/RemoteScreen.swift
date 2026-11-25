@@ -67,7 +67,8 @@ struct RemoteScreen: View {
         PhaseContent(phase: phase, layout: layout)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background { RemoteBackdrop() }
-            .overlay(alignment: .top) { BannerStack(isReconnecting: phase == .remote(readOnly: true)) }
+            // Reconnecting shows in the title's status line (and the dimmed remote), not here.
+            .overlay(alignment: .top) { BannerStack() }
             .toolbar {
                 if phase.showsSpeakerChrome {
                     ToolbarItem(placement: .principal) { StatusTitle(phase: phase) }

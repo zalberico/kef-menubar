@@ -55,14 +55,16 @@ struct OnboardingView: View {
                 .glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
 
                 VStack(spacing: 14) {
-                    Button {
-                        Task { await model.discover() }
-                    } label: {
-                        Label(model.isDiscovering ? "Scanning…" : "Scan Again", systemImage: "arrow.clockwise")
+                    // The panel above shows a scan in progress; the button is for after one.
+                    if !model.isDiscovering {
+                        Button {
+                            Task { await model.discover() }
+                        } label: {
+                            Label("Scan Again", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-                    .disabled(model.isDiscovering)
 
                     if ui.showsManualEntry {
                         VStack(alignment: .leading, spacing: 8) {
@@ -110,7 +112,7 @@ struct LocalNetworkDeniedView: View {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             }
-            .buttonStyle(.glassProminent)
+            .prominentGlassStyle()
             .controlSize(.large)
         }
     }
@@ -158,10 +160,8 @@ struct OfflineView: View {
             }
         } description: {
             VStack(spacing: 10) {
-                if let reason = model.connection.offlineReason ?? ui.lastOfflineReason {
-                    Text(reason)
-                        .lineLimit(3)
-                }
+                Text(OfflineExplanation(reason: model.connection.offlineReason ?? ui.lastOfflineReason,
+                                        host: model.host).text)
                 if retrying {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.mini)
@@ -177,7 +177,7 @@ struct OfflineView: View {
                 } label: {
                     Text("Retry").frame(minWidth: 160)
                 }
-                .buttonStyle(.glassProminent)
+                .prominentGlassStyle()
                 .controlSize(.large)
 
                 Button {
@@ -191,10 +191,32 @@ struct OfflineView: View {
         }
     }
 
-    /// "Can't reach Living Room", unless the address isn't one the app knows a name for.
+    /// "Can't Reach Living Room", or "Can't Reach Speaker" when the app knows no name for
+    /// the address (the description gives the address).
     private var title: String {
-        if model.hasKnownName { return "Can't reach \(model.name)" }
-        if let host = model.host { return "Can't reach the speaker at \(host)" }
-        return "Can't reach the speaker"
+        model.hasKnownName ? "Can't Reach \(model.name)" : "Can't Reach Speaker"
+    }
+}
+
+/// The offline screen's description: the model's reason (written for logs, e.g. "Speaker
+/// unreachable: 192.0.2.1: The request timed out.") turned into a sentence that says what
+/// to check. The raw reason stays in the log.
+struct OfflineExplanation {
+    let reason: String?
+    let host: String?
+
+    var text: String {
+        let reason = reason ?? ""
+        if reason == "No speaker found" {
+            return "No speaker answered on this Wi-Fi network. Check that it's plugged in and on the same network as this iPhone."
+        }
+        if reason.hasPrefix("A different speaker answered") {
+            return "Another speaker answered at \(host ?? "this address"). Choose your speaker again."
+        }
+        let from = host.map { "No response from \($0)." } ?? "No response from the speaker."
+        if reason.hasPrefix("Speaker unreachable") || reason.isEmpty {
+            return "\(from) Check that the speaker is on and connected to the same Wi-Fi network as this iPhone."
+        }
+        return "The speaker at \(host ?? "this address") answered in a way Speakeasy didn't expect. Try again, or restart the speaker."
     }
 }

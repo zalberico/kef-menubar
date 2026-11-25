@@ -63,6 +63,9 @@ final class Lifecycle {
     }
 
     private func suspendNow(_ id: Int) async {
+        // Back in the foreground before this ran (the task `expire()` queues can run after a
+        // thaw, once `.active` has already resumed): suspending now would drop the new session.
+        guard id == suspendID, !Task.isCancelled else { return }
         AppLog.lifecycle.info("suspend")
         await model.suspend()
         guard id == suspendID else { return }  // back in the foreground meanwhile

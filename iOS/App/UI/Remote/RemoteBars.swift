@@ -67,29 +67,20 @@ private struct PanelButton: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
 
         if isSelected {
-            button.buttonStyle(.glassProminent)
+            button.prominentGlassStyle()
         } else {
             button.buttonStyle(.glass)
         }
     }
 }
 
-/// Transient notices over the top of the remote: reconnecting, a firmware update in
-/// progress, and the last error (the model clears it after a few seconds).
+/// Transient notices over the top of the remote: a firmware update in progress, and the
+/// last error (the model clears it after a few seconds).
 struct BannerStack: View {
-    let isReconnecting: Bool
-
     @Environment(SpeakerModel.self) private var model
 
     var body: some View {
         VStack(spacing: 8) {
-            if isReconnecting {
-                Banner {
-                    ProgressView().controlSize(.small)
-                    Text("Connecting…")
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
             if model.showsFirmwareUpdating {
                 Banner {
                     Image(systemName: "arrow.triangle.2.circlepath")
@@ -111,7 +102,6 @@ struct BannerStack: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
-        .animation(.spring(duration: 0.35), value: isReconnecting)
         .animation(.spring(duration: 0.35), value: model.lastError)
         .animation(.spring(duration: 0.35), value: model.showsFirmwareUpdating)
     }
