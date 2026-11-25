@@ -36,7 +36,7 @@ struct SnapshotStoreTests {
     @Test func artworkIsStoredSmall() throws {
         try withStore { store in
             try store.write(Self.sample, artwork: Self.image(width: 800, height: 400))
-            let art = try #require(store.readArtwork())
+            let art = try #require(store.readArtwork(key: store.read()?.artworkKey))
             #expect(max(art.width, art.height) == 300)
             #expect(art.width == 2 * art.height)
             #expect(store.read()?.artworkKey == "abc123")
@@ -47,8 +47,9 @@ struct SnapshotStoreTests {
         try withStore { store in
             try store.write(Self.sample, artwork: Self.image(width: 64, height: 64))
             try store.write(Self.sample, artwork: nil)
-            #expect(store.readArtwork() == nil)
+            #expect(store.readArtwork(key: "abc123") == nil)
             #expect(store.read()?.artworkKey == nil)
+            #expect(Self.artworkFiles(store).isEmpty)
         }
     }
 
@@ -63,6 +64,41 @@ struct SnapshotStoreTests {
             fresh.artworkKey = "another-track"
             try store.update(with: fresh)
             #expect(store.read()?.artworkKey == nil)
+        }
+    }
+
+    static func artworkFiles(_ store: SnapshotStore) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: store.containerURL.path)) ?? [])
+            .filter { $0.hasPrefix("artwork") }.sorted()
+    }
+
+    @Test func artworkIsReadOnlyForItsKey() throws {
+        try withStore { store in
+            try store.write(Self.sample, artwork: Self.image(width: 64, height: 64))
+            #expect(store.readArtwork(key: "abc123") != nil)
+            // Text from one track and art from another read as "no art".
+            #expect(store.readArtwork(key: "another-track") == nil)
+            #expect(store.readArtwork(key: nil) == nil)
+            var next = Self.sample
+            next.artworkKey = "def456"
+            try store.write(next, artwork: Self.image(width: 64, height: 64))
+            #expect(store.readArtwork(key: "def456") != nil)
+            #expect(store.readArtwork(key: "abc123") == nil)  // the older art is removed
+            #expect(Self.artworkFiles(store) == ["artwork-def456.jpg"])
+        }
+    }
+
+    @Test func artworkKeysMustBePlainNames() throws {
+        try withStore { store in
+            #expect(store.artworkURL(for: "abc-123") != nil)
+            #expect(store.artworkURL(for: "../escape") == nil)
+            #expect(store.artworkURL(for: "a/b") == nil)
+            #expect(store.artworkURL(for: "") == nil)
+            var odd = Self.sample
+            odd.artworkKey = "../escape"
+            try store.write(odd, artwork: Self.image(width: 64, height: 64))
+            #expect(store.read()?.artworkKey == nil)
+            #expect(Self.artworkFiles(store).isEmpty)
         }
     }
 

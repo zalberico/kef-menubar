@@ -123,6 +123,34 @@ struct SpeakerModelLifecycleTests {
         await cleanUp(h)
     }
 
+    @Test func aCancelledSuspendStopsWaitingForTheDrain() async {
+        let h = makeHarness(last: 55)
+        h.model.start()
+        #expect(await eventually { h.model.isOnline })
+        h.speaker.delay(3, for: "POST " + KEFPath.volume)  // a write that outlasts the drain
+        h.model.setVolume(25)
+        let started = ContinuousClock.now
+        let suspending = Task { await h.model.suspend() }
+        try? await Task.sleep(for: .milliseconds(150))
+        suspending.cancel()
+        await suspending.value
+        // Returned at once instead of sleeping (or spinning) to the 2 s drain deadline.
+        #expect(ContinuousClock.now - started < .seconds(1))
+        #expect(h.model.isSuspended && h.model.hasCachedState)
+        await cleanUp(h)
+    }
+
+    @Test func anUnknownInputCountsAsOnInTheSnapshot() async {
+        let h = makeHarness(last: 56)
+        h.speaker.set(KEFPath.physicalSource, typed: "kefPhysicalSource", #""futureInput""#)
+        h.model.start()
+        #expect(await eventually { h.model.isOnline })
+        #expect(h.model.source == nil)
+        let snapshot = h.model.snapshot()
+        #expect(snapshot?.isOn == true && snapshot?.source == nil)
+        await cleanUp(h)
+    }
+
     @Test func overlappingDiscoveriesKeepScanningUntilTheLastEnds() async {
         let gate = Box(0)
         let suite = "KEFAppCoreTests.\(UUID().uuidString)"

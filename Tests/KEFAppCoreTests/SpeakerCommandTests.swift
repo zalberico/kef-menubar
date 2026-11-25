@@ -259,6 +259,21 @@ struct SpeakerCommandTests {
         #expect(speaker.writes.isEmpty)
     }
 
+    @Test func anUnknownInputCountsAsOn() async throws {
+        let speaker = FakeSpeaker(last: 32)
+        speaker.set(KEFPath.physicalSource, typed: "kefPhysicalSource", #""futureInput""#)
+        let command = try command(speaker)
+        let snapshot = try await command.snapshot()
+        #expect(snapshot.isOn && snapshot.source == nil)
+        // Already on: turning on keeps the unknown input; standby still works.
+        let on = try await command.setPower(true)
+        #expect(on.isOn && !on.wrote && on.source == nil)
+        #expect(speaker.writes.isEmpty)
+        let off = try await command.setPower(false)
+        #expect(!off.isOn && off.wrote)
+        #expect(speaker.written(KEFPath.physicalSource) == [#""standby""#])
+    }
+
     // MARK: Deadline
 
     @Test func aHungSpeakerTimesOutWithoutWriting() async throws {
@@ -284,5 +299,15 @@ struct SpeakerCommandTests {
         #expect(ContinuousClock.now - started < .seconds(2))
         #expect(speaker.written(KEFPath.volume) == ["30"])
         #expect(SpeakerCommandError.timedOut(writeSent: true).errorDescription?.contains("may not have applied") == true)
+    }
+
+    @Test func noWriteStartsOnceTheDeadlineHasPassed() {
+        let tracker = WriteTracker()
+        #expect(tracker.markSent())
+        #expect(tracker.expire())
+        #expect(!tracker.markSent())
+        let unsent = WriteTracker()
+        #expect(!unsent.expire())
+        #expect(!unsent.markSent() && !unsent.sent)
     }
 }

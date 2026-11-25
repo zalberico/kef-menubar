@@ -246,6 +246,7 @@ public struct SpeakerCommand: Sendable {
     // MARK: Reading
 
     /// The speaker's state for the widgets (no artwork: the key tells whether stored art matches).
+    /// An input this app doesn't know counts as on, as in ``SpeakerModel/snapshot(at:)``.
     public func snapshot() async throws -> SpeakerSnapshot {
         try await run { _ in
             try await verifyIdentity()
@@ -307,7 +308,8 @@ public struct SpeakerCommand: Sendable {
 
     private func write(_ tracker: WriteTracker, _ body: () async throws -> Void) async throws {
         try Task.checkCancellation()
-        tracker.markSent()
+        // Refused once the deadline has passed, so a time-out's `writeSent` is always right.
+        guard tracker.markSent() else { throw CancellationError() }
         try await body()
     }
 
@@ -329,7 +331,7 @@ public struct SpeakerCommand: Sendable {
                         let timer = Task {
                             try? await Task.sleep(for: remaining)
                             guard !Task.isCancelled else { return }
-                            if race.finish(.failure(SpeakerCommandError.timedOut(writeSent: tracker.sent))) {
+                            if race.finish(.failure(SpeakerCommandError.timedOut(writeSent: tracker.expire()))) {
                                 worker.cancel()
                                 await client.transport.close()
                             }
@@ -359,12 +361,30 @@ public struct SpeakerCommand: Sendable {
 }
 
 /// Remembers whether a write went out (so a time-out can say "may not have applied").
+/// Sending and the deadline are decided under one lock: after ``expire()`` no write starts.
 final class WriteTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var wasSent = false
+    private var expired = false
 
     var sent: Bool { lock.withLock { wasSent } }
-    func markSent() { lock.withLock { wasSent = true } }
+
+    /// Record that a write is about to go out; `false` (send nothing) once expired.
+    func markSent() -> Bool {
+        lock.withLock {
+            guard !expired else { return false }
+            wasSent = true
+            return true
+        }
+    }
+
+    /// The deadline passed: refuse further writes and return whether one went out.
+    func expire() -> Bool {
+        lock.withLock {
+            expired = true
+            return wasSent
+        }
+    }
 }
 
 /// The first of the work, the deadline or a cancellation to finish resumes the caller.

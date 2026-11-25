@@ -199,7 +199,8 @@ public final class SpeakerModel {
         if let host { connection = .connecting(host) }
         let deadline = ContinuousClock.now + .seconds(2)
         while volumeWriter != nil || eqWriter != nil || settingsWritesInFlight > 0, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
+            // A cancelled caller stops waiting (a cancelled sleep returns at once and would spin).
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
             guard generation == lifecycleGeneration else { return }
         }
         guard generation == lifecycleGeneration, let client else { return }
