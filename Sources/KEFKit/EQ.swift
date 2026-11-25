@@ -62,6 +62,19 @@ public struct EqProfile: Sendable, Equatable {
 
     public var hasSubwoofer: Bool { subwooferCount > 0 }
 
+    /// Change the number of subwoofers, keeping the speakers' high-pass consistent with it:
+    /// with no sub the speakers must play the full range, so the high-pass goes off; adding a
+    /// sub to a profile that had none turns it back on, at its saved frequency.
+    public mutating func setSubwooferCount(_ count: Int) {
+        let hadSubwoofer = hasSubwoofer
+        subwooferCount = count
+        if count == 0 {
+            set(.highPassMode, false)
+        } else if !hadSubwoofer {
+            set(.highPassMode, true)
+        }
+    }
+
     /// The typed value to send with `setData`, with numbers typed like the reference
     /// client writes them (`balance` int, gains as floats, frequencies int when integral).
     public var apiValue: JSON {

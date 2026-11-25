@@ -216,6 +216,23 @@ struct EqTests {
         #expect(throws: KEFError.self) { try eq.validate() }
     }
 
+    /// No sub means full-range speakers: choosing None turns the high-pass off, and adding a
+    /// sub back turns it on at the frequency it had. Changing 1 ↔ 2 leaves it alone.
+    @Test func subwooferCountKeepsHighPassConsistent() throws {
+        var eq = try EqProfile(json: JSON(parsing: Self.profile))
+        eq.set(.highPassMode, true)
+        let frequency = eq.double(.highPassModeFreq)
+        eq.setSubwooferCount(0)
+        #expect(eq.subwooferCount == 0 && eq.bool(.highPassMode) == false)
+        #expect(eq.double(.highPassModeFreq) == frequency)
+        eq.setSubwooferCount(1)
+        #expect(eq.bool(.highPassMode) == true && eq.double(.highPassModeFreq) == frequency)
+        eq.set(.highPassMode, false)  // the user's own choice with a sub
+        eq.setSubwooferCount(2)
+        #expect(eq.subwooferCount == 2 && eq.bool(.highPassMode) == false)
+        try eq.validate()
+    }
+
     @Test func normalizeNeverTraps() throws {
         var eq = try EqProfile(json: JSON(parsing: Self.profile))
         eq.set(.balance, .infinity)

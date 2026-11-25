@@ -396,7 +396,10 @@ private struct SoundControls: View {
                 }
                 ValueSlider(title: "Sub crossover", value: eq.double(.subOutLPFreq) ?? 80, range: model.range(.subOutLPFreq),
                             format: Fmt.hertz) { v in model.updateEQ { $0.set(.subOutLPFreq, v) } }
-                ToggleSlider(title: "Speaker high-pass", key: .highPassMode, settingKey: .highPassModeFreq, eq: eq, format: Fmt.hertz)
+            }
+            // Always reachable: with no sub it should normally be off (full-range speakers).
+            ToggleSlider(title: "Speaker high-pass", key: .highPassMode, settingKey: .highPassModeFreq, eq: eq, format: Fmt.hertz)
+            if eq.hasSubwoofer {
                 LabeledRow("Sub polarity") {
                     Picker("Sub polarity", selection: Binding(
                         get: { eq.string(.subwooferPolarity) ?? "normal" },
@@ -433,7 +436,7 @@ private struct SubwooferCountRow: View {
         LabeledRow("Subwoofers") {
             Picker("Subwoofers", selection: Binding(
                 get: { eq.subwooferCount },
-                set: { n in model.updateEQ { $0.subwooferCount = n } })
+                set: { n in model.updateEQ { $0.setSubwooferCount(n) } })
             ) {
                 Text("None").tag(0)
                 ForEach(1...maxCount, id: \.self) { Text("\($0)").tag($0) }
