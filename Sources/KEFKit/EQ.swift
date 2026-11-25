@@ -54,7 +54,13 @@ public struct EqProfile: Sendable, Equatable {
     public mutating func set(_ key: EqKey, _ value: Double) { self[key] = .double(value) }
     public mutating func set(_ key: EqKey, _ value: String) { self[key] = .string(value) }
 
-    public var hasSubwoofer: Bool { (self[.subwooferCount]?.int ?? 0) > 0 }
+    /// Number of wired subwoofers configured for this input's profile (0, 1 or 2).
+    public var subwooferCount: Int {
+        get { self[.subwooferCount]?.int ?? 0 }
+        set { self[.subwooferCount] = .int(Int64(newValue)) }
+    }
+
+    public var hasSubwoofer: Bool { subwooferCount > 0 }
 
     /// The typed value to send with `setData`, with numbers typed like the reference
     /// client writes them (`balance` int, gains as floats, frequencies int when integral).
@@ -133,6 +139,7 @@ public struct EqRange: Sendable, Equatable {
         .highPassModeFreq: EqRange(50, 120, step: 2.5),
         .subOutLPFreq: EqRange(40, 250, step: 2.5),
         .subwooferGain: EqRange(-10, 10, step: 1),
+        .subwooferCount: EqRange(0, 2, step: 1),
     ]
 
     /// Ranges advertised by the speaker in `kef:dsp/editValue` (`getRows` answer).

@@ -203,6 +203,19 @@ struct EqTests {
         try offGridFrequency.validate()
     }
 
+    @Test func subwooferCount() throws {
+        var eq = try EqProfile(json: JSON(parsing: Self.profile))
+        #expect(eq.subwooferCount == 1 && eq.hasSubwoofer)
+        eq.subwooferCount = 0
+        #expect(!eq.hasSubwoofer)
+        #expect(eq.apiValue.unwrapped["subwooferCount"] == .int(0))
+        try eq.validate()
+        eq.subwooferCount = 2
+        try eq.validate()
+        eq.subwooferCount = 3
+        #expect(throws: KEFError.self) { try eq.validate() }
+    }
+
     @Test func normalizeNeverTraps() throws {
         var eq = try EqProfile(json: JSON(parsing: Self.profile))
         eq.set(.balance, .infinity)
