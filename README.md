@@ -196,9 +196,9 @@ streaming service's image server.
 pick which one in Settings, and the app then sticks to that speaker by its MAC address,
 even if its IP address changes.
 
-**Why not the App Store?** The app needs to reach the speaker on your local network,
-including over plain HTTP on older firmware, which doesn't fit the App Store sandbox well.
-The releases here are signed with Developer ID and notarized by Apple instead.
+**Why not the App Store?** It hasn't been needed. The releases here are signed with
+Developer ID and notarized by Apple, which is all macOS needs to open them without a
+warning.
 
 ## How it works
 
