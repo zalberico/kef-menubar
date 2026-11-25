@@ -77,13 +77,10 @@ The Mac and the speaker must be on the same network.
 
 1. Download the latest **KEF-Menu-Bar-….zip** from
    [Releases](https://github.com/zalberico/kef-menubar/releases/latest) and unzip it.
-2. Move **KEF Menu Bar** to your Applications folder and open it.
-3. The release builds aren't notarized by Apple yet, so the first time you open it macOS
-   says it can't verify the app. Click **Done**, then open System Settings › Privacy &
-   Security, scroll down to the message about KEF Menu Bar and click **Open Anyway**.
-   You only have to do this once. (If you'd rather use Terminal:
-   `xattr -dr com.apple.quarantine "/Applications/KEF Menu Bar.app"`.)
-4. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
+2. Move **KEF Menu Bar** to your Applications folder and open it. The app is signed and
+   notarized by Apple, so macOS only asks you to confirm opening an app downloaded from
+   the internet.
+3. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
    the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
    Privacy & Security › Local Network.
 
@@ -126,9 +123,10 @@ builds the app, then publishes it as a GitHub Release:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-The workflow ad-hoc signs the app unless the Developer ID secrets listed at the top of the
-workflow are set. With them, it signs with Developer ID and has Apple notarize the build,
-so it opens without the Open Anyway step.
+The workflow signs the app with Developer ID and has Apple notarize it, using the secrets
+listed at the top of the workflow. Without those secrets (in a fork, say) it falls back to
+an ad-hoc signature, and macOS then makes people allow the app once in System Settings ›
+Privacy & Security › **Open Anyway**.
 
 ## Using it
 
@@ -198,8 +196,9 @@ streaming service's image server.
 pick which one in Settings, and the app then sticks to that speaker by its MAC address,
 even if its IP address changes.
 
-**Why not the App Store or a notarized download?** It hasn't been needed yet. If there's
-interest, a signed and notarized release is a reasonable next step.
+**Why not the App Store?** It hasn't been needed. The releases here are signed with
+Developer ID and notarized by Apple, which is all macOS needs to open them without a
+warning.
 
 ## How it works
 
