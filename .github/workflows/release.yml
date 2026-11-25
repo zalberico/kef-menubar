@@ -23,6 +23,9 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/build-app.sh
+      - Package.swift
+      - Sources/**
+      - Tests/**
 
 permissions:
   contents: write
