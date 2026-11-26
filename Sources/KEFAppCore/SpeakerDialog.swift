@@ -89,9 +89,18 @@ public struct SpeakerDialog: Sendable, Equatable {
 
     // MARK: Playback
 
-    /// "Paused." / "Playing." / "Skipped." / "Playing the previous track."
+    /// "Paused." / "Playing." / "Skipped." / "Playing the previous track.", and for a play
+    /// or pause that found the speaker so already (nothing sent): "Already playing." /
+    /// "Already paused." / "Nothing is playing."
     public func playback(_ outcome: PlaybackOutcome) -> String {
         switch outcome.command {
+        case .pause where !outcome.wrote:
+            switch (outcome.request, outcome.previous) {
+            case (.play, _): "Already playing."
+            case (_, .paused): "Already paused."
+            case (_, .transitioning): "Nothing is playing yet."
+            default: "Nothing is playing."
+            }
         case .pause: outcome.wasPlaying ? "Paused." : "Playing."
         case .stop: "Stopped."
         case .next: "Skipped."

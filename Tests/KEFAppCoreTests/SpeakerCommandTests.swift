@@ -206,6 +206,41 @@ struct SpeakerCommandTests {
         #expect(controls == [#"{"control":"pause"}"#, #"{"control":"next"}"#])
     }
 
+    @Test func pauseNeverStartsPlaybackAndPlayNeverPauses() async throws {
+        let speaker = FakeSpeaker(last: 29)
+        let command = try command(speaker)
+        func controls() -> Int { speaker.writes.filter { $0.path == KEFPath.playerControl }.count }
+
+        // Paused: "pause" sends nothing, "play" sends the toggle.
+        speaker.set(KEFPath.playerData, raw: #"{"state":"paused","controls":{"pause":true}}"#)
+        let pause = try await command.playPause(.pause)
+        #expect(!pause.wrote && pause.request == .pause && pause.previous == .paused && controls() == 0)
+        let play = try await command.playPause(.play)
+        #expect(play.wrote && !play.wasPlaying && controls() == 1)
+
+        // Playing (or starting to): "play" sends nothing, "pause" sends the toggle.
+        speaker.set(KEFPath.playerData, raw: #"{"state":"playing","controls":{"pause":true}}"#)
+        #expect(try await command.playPause(.play).wrote == false)
+        #expect(controls() == 1)
+        let paused = try await command.playPause(.pause)
+        #expect(paused.wrote && paused.wasPlaying && controls() == 2)
+        speaker.set(KEFPath.playerData, raw: #"{"state":"transitioning","controls":{"pause":true}}"#)
+        #expect(try await command.playPause(.play).wrote == false)
+        #expect(try await command.playPause(.pause).wrote == false)
+
+        // Stopped: "pause" sends nothing even when the speaker offers the toggle.
+        speaker.set(KEFPath.playerData, raw: #"{"state":"stopped","controls":{"pause":true}}"#)
+        let stopped = try await command.playPause(.pause)
+        #expect(!stopped.wrote && stopped.previous == .stopped)
+        #expect(controls() == 2)
+
+        // "Play" still needs the speaker to offer the control.
+        speaker.set(KEFPath.playerData, raw: #"{"state":"paused","controls":{"pause":false}}"#)
+        await #expect(throws: SpeakerCommandError.controlUnavailable(.pause)) { try await command.playPause(.play) }
+        #expect(try await command.playPause(.pause).wrote == false)
+        #expect(controls() == 2)
+    }
+
     // MARK: Safety
 
     @Test func neverTouchesABlockedPathAndOnlyPlaybackSendsControl() async throws {

@@ -155,19 +155,56 @@ struct SwitchInputIntent: AppIntent {
 
 // MARK: Playback
 
+/// Play, pause, or either. The speaker only has a toggle, so "Pause" sends it only while
+/// playing and "Play" only while paused: saying "Pause" never starts the music.
 struct PlayPauseIntent: AppIntent {
     static let title: LocalizedStringResource = "Play or Pause Speaker"
     static let description = IntentDescription(
-        "Pauses your speaker, or plays again, when what it's playing allows it.", categoryName: "Playback")
+        "Plays or pauses your speaker, when what it's playing allows it. Pause never starts playback, and Play never pauses it.",
+        categoryName: "Playback")
     static var supportedModes: IntentModes { .background }
 
+    @Parameter(title: "Action", default: .playPause)
+    var action: PlaybackAction
+
     static var parameterSummary: some ParameterSummary {
-        Summary("Play or pause the speaker")
+        Summary("\(\.$action) the speaker")
+    }
+
+    init() {}
+
+    init(action: PlaybackAction) {
+        self.action = action
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = try await SpeakerActions.playPause()
+        let result = try await SpeakerActions.playPause(action.request)
         return .result(dialog: "\(result.reply)")
+    }
+}
+
+/// What Play or Pause does. The raw values are saved in people's shortcuts, so they never
+/// change; add cases at the end.
+enum PlaybackAction: String, AppEnum {
+    case playPause = "playPause"
+    case play = "play"
+    case pause = "pause"
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Playback Action")
+
+    // The titles are also what Siri listens for ("Pause Speakeasy").
+    static let caseDisplayRepresentations: [PlaybackAction: DisplayRepresentation] = [
+        .playPause: DisplayRepresentation(title: "Play or Pause", image: .init(systemName: "playpause.fill")),
+        .play: DisplayRepresentation(title: "Play", image: .init(systemName: "play.fill"), synonyms: ["Resume"]),
+        .pause: DisplayRepresentation(title: "Pause", image: .init(systemName: "pause.fill")),
+    ]
+
+    var request: PlaybackRequest {
+        switch self {
+        case .playPause: .toggle
+        case .play: .play
+        case .pause: .pause
+        }
     }
 }
 

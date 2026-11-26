@@ -163,8 +163,8 @@ enum SpeakerActions {
         return try await SpeakerAccess.perform(refresh: true, { try await $0.select(source) }, apply: { $0.apply($1) }, reply: { $0.input($1) })
     }
 
-    static func playPause() async throws -> (outcome: PlaybackOutcome, reply: String) {
-        try await SpeakerAccess.perform({ try await $0.playPause() }, apply: { $0.apply($1) }, reply: { $0.playback($1) })
+    static func playPause(_ request: PlaybackRequest) async throws -> (outcome: PlaybackOutcome, reply: String) {
+        try await SpeakerAccess.perform({ try await $0.playPause(request) }, apply: { $0.apply($1) }, reply: { $0.playback($1) })
     }
 
     static func next() async throws -> (outcome: PlaybackOutcome, reply: String) {

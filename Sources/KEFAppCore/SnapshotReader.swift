@@ -34,7 +34,10 @@ public actor SnapshotReader {
     }
 
     /// The current snapshot, reading the speaker with `read` at most once for callers that
-    /// overlap. The result is written to the store.
+    /// overlap. The result is written to the store, unless the store was written while the
+    /// read ran (an intent's outcome, the app): that is newer than what the read began
+    /// with, so it is kept and served instead. A widget or control reload after an intent
+    /// can join a read that started before it and still gets the intent's change.
     public func current(read: @escaping @Sendable () async throws -> SpeakerSnapshot) async -> Reading {
         if let inFlight { return await inFlight.value }
         let stored = store.read()
@@ -45,12 +48,13 @@ public actor SnapshotReader {
         if let attempt = store.lastReadAttempt(), abs(date.timeIntervalSince(attempt)) < maxAge {
             return Reading(snapshot: stored, isFresh: false)
         }
+        let revision = store.revision()
         store.markReadAttempt(at: date)
         let store = store
         let task = Task<Reading, Never> {
             do {
                 let fresh = try await read()
-                try? store.update(with: fresh)
+                if store.revision() == revision { try? store.update(with: fresh) }
                 return Reading(snapshot: store.read() ?? fresh, isFresh: true)
             } catch {
                 return Reading(snapshot: store.read(), isFresh: false, readFailed: true)
@@ -65,6 +69,20 @@ public actor SnapshotReader {
 
 extension SnapshotStore {
     private var readAttemptURL: URL { containerURL.appendingPathComponent("read-attempt") }
+    var revisionURL: URL { containerURL.appendingPathComponent("snapshot-revision") }
+
+    /// Changes with every write of the snapshot (any process), so a read can tell whether
+    /// the store was written while it ran. `nil` before the first write.
+    public func revision() -> String? {
+        guard let data = try? Data(contentsOf: revisionURL) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Mark the snapshot as about to change. Before the write, so a read that checks between
+    /// the two already sees the change coming and doesn't overwrite it.
+    func bumpRevision() throws {
+        try Data(UUID().uuidString.utf8).write(to: revisionURL, options: .atomic)
+    }
 
     /// When a fresh read last started (any process), so overlapping askers share it.
     public func lastReadAttempt() -> Date? {
@@ -115,9 +133,10 @@ extension SpeakerSnapshot {
         }
     }
 
-    /// Play / pause flips the playback state; a skip leaves the track to the next read.
+    /// Play / pause flips the playback state (when it was sent); a skip leaves the track to
+    /// the next read.
     public mutating func apply(_ outcome: PlaybackOutcome) {
-        if outcome.command == .pause {
+        if outcome.command == .pause, outcome.wrote {
             playback = (outcome.wasPlaying ? PlayerState.Playback.paused : .playing).rawValue
         }
     }

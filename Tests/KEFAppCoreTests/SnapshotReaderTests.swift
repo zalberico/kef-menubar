@@ -94,6 +94,42 @@ struct SnapshotReaderTests {
         }
     }
 
+    @Test func anOutcomeFoldedInDuringAReadIsKept() async throws {
+        try await withStore { store in
+            try store.write(Self.snapshot(volume: 12, at: Self.start.addingTimeInterval(-60)))
+            let reader = SnapshotReader(store: store, now: { Self.start })
+            let (started, startedGo) = AsyncStream.makeStream(of: Void.self)
+            let (proceed, proceedGo) = AsyncStream.makeStream(of: Void.self)
+            // The read began before the mute was sent, so it still sees the speaker unmuted.
+            async let reading = reader.current {
+                startedGo.yield()
+                for await _ in proceed { break }
+                return Self.snapshot(volume: 12, at: Self.start)
+            }
+            for await _ in started { break }
+            store.apply { $0.apply(MuteOutcome(speakerName: "Living Room", muted: true, wrote: true)) }
+            // A reload after the intent joins the read that is still running.
+            async let joined = reader.current { Issue.record("read the speaker again"); throw CancellationError() }
+            try await Task.sleep(for: .milliseconds(50))
+            proceedGo.yield()
+            let (first, second) = await (reading, joined)
+            #expect(store.read()?.muted == true)
+            #expect(first.snapshot?.muted == true && second.snapshot?.muted == true)
+        }
+    }
+
+    @Test func everyWriteChangesTheRevision() async throws {
+        try await withStore { store in
+            #expect(store.revision() == nil)
+            try store.write(Self.snapshot(at: Self.start))
+            let first = try #require(store.revision())
+            store.apply { $0.muted = true }
+            let second = try #require(store.revision())
+            try store.update(with: Self.snapshot(at: Self.start))
+            #expect(first != second && store.revision() != second)
+        }
+    }
+
     // MARK: Folding outcomes into the snapshot
 
     @Test func outcomesUpdateTheStoredSnapshotButNotItsAge() async throws {
@@ -111,6 +147,12 @@ struct SnapshotReaderTests {
             #expect(store.read()?.muted == true)
 
             store.apply { $0.apply(PlaybackOutcome(speakerName: "Living Room", command: .pause, wasPlaying: true)) }
+            #expect(store.read()?.playback == "paused")
+            // A pause that found it paused already sends nothing and changes nothing.
+            store.apply {
+                $0.apply(PlaybackOutcome(speakerName: "Living Room", command: .pause, wasPlaying: false, request: .pause,
+                                         previous: .paused, wrote: false))
+            }
             #expect(store.read()?.playback == "paused")
             store.apply { $0.apply(PlaybackOutcome(speakerName: "Living Room", command: .next, wasPlaying: false)) }
             #expect(store.read()?.playback == "paused" && store.read()?.title == "A Song")

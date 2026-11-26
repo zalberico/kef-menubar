@@ -106,6 +106,23 @@ struct SpeakerDialogTests {
         #expect(line(.stop, playing: true) == "Stopped.")
     }
 
+    @Test func playOrPauseThatFoundTheSpeakerSoAlready() {
+        func line(_ request: PlaybackRequest, _ previous: PlayerState.Playback) -> String {
+            dialog.playback(PlaybackOutcome(speakerName: "Living Room", command: .pause, wasPlaying: previous == .playing,
+                                            request: request, previous: previous, wrote: false))
+        }
+        #expect(line(.play, .playing) == "Already playing.")
+        #expect(line(.play, .transitioning) == "Already playing.")
+        #expect(line(.pause, .paused) == "Already paused.")
+        #expect(line(.pause, .stopped) == "Nothing is playing.")
+        #expect(line(.pause, .transitioning) == "Nothing is playing yet.")
+        // Sent: as for the toggle.
+        #expect(dialog.playback(PlaybackOutcome(speakerName: "Living Room", command: .pause, wasPlaying: false,
+                                                request: .play, previous: .paused)) == "Playing.")
+        #expect(dialog.playback(PlaybackOutcome(speakerName: "Living Room", command: .pause, wasPlaying: true,
+                                                request: .pause, previous: .playing)) == "Paused.")
+    }
+
     @Test func outcomeNameWinsOverTheStoredOne() {
         let renamed = MuteOutcome(speakerName: "Kitchen", muted: true, wrote: true)
         #expect(dialog.mute(renamed) == "Kitchen is muted.")

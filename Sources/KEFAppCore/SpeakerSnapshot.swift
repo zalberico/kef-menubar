@@ -85,6 +85,7 @@ public struct SnapshotStore: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .secondsSince1970
         try FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true)
+        try bumpRevision()
         try encoder.encode(snapshot).write(to: snapshotURL, options: .atomic)
     }
 

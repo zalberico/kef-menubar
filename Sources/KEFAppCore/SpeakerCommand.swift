@@ -84,6 +84,28 @@ public struct PlaybackOutcome: Sendable, Equatable {
     public var speakerName: String
     public var command: PlayerCommand
     public var wasPlaying: Bool
+    /// What a play / pause asked for (`.toggle` for the other commands).
+    public var request: PlaybackRequest
+    /// The playback state before the command.
+    public var previous: PlayerState.Playback
+    /// The command was sent; `false` when a play or pause found the speaker already so.
+    public var wrote: Bool
+
+    public init(speakerName: String, command: PlayerCommand, wasPlaying: Bool, request: PlaybackRequest = .toggle,
+                previous: PlayerState.Playback? = nil, wrote: Bool = true) {
+        self.speakerName = speakerName
+        self.command = command
+        self.wasPlaying = wasPlaying
+        self.request = request
+        self.previous = previous ?? (wasPlaying ? .playing : .paused)
+        self.wrote = wrote
+    }
+}
+
+/// What a play / pause asks for. The speaker only has a toggle, so `play` and `pause` send
+/// it only when the speaker isn't already in that state: "pause" never starts playback.
+public enum PlaybackRequest: Sendable, Equatable {
+    case toggle, play, pause
 }
 
 /// One-shot speaker access for widgets, controls and intents: read what the operation needs,
@@ -220,9 +242,26 @@ public struct SpeakerCommand: Sendable {
 
     // MARK: Playback
 
-    /// Play / pause, only when the speaker offers it for what is playing.
-    public func playPause() async throws -> PlaybackOutcome {
-        try await control(.pause) { $0.canPause }
+    /// Play / pause, only when the speaker offers it for what is playing. The speaker's
+    /// control is a toggle: `.pause` sends it only while playing and `.play` only while
+    /// paused or stopped; otherwise nothing is sent and the outcome says so (`wrote` false).
+    public func playPause(_ request: PlaybackRequest = .toggle) async throws -> PlaybackOutcome {
+        try await run { tracker in
+            try await verifyIdentity()
+            let state = try await client.playerState()
+            let playingOrStarting = state.playback == .playing || state.playback == .transitioning
+            let already = switch request {
+            case .toggle: false
+            case .play: playingOrStarting
+            case .pause: state.playback != .playing
+            }
+            if !already {
+                guard state.canPause else { throw SpeakerCommandError.controlUnavailable(.pause) }
+                try await write(tracker) { try await client.control(.pause) }
+            }
+            return PlaybackOutcome(speakerName: try await speakerName(), command: .pause, wasPlaying: state.isPlaying,
+                                   request: request, previous: state.playback, wrote: !already)
+        }
     }
 
     public func next() async throws -> PlaybackOutcome {
@@ -239,7 +278,8 @@ public struct SpeakerCommand: Sendable {
             let state = try await client.playerState()
             guard available(state) else { throw SpeakerCommandError.controlUnavailable(command) }
             try await write(tracker) { try await client.control(command) }
-            return PlaybackOutcome(speakerName: try await speakerName(), command: command, wasPlaying: state.isPlaying)
+            return PlaybackOutcome(speakerName: try await speakerName(), command: command, wasPlaying: state.isPlaying,
+                                   previous: state.playback)
         }
     }
 

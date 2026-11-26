@@ -80,10 +80,10 @@ struct SpeakerShortcuts: AppShortcutsProvider {
             systemImageName: "powersleep")
         AppShortcut(
             intent: PlayPauseIntent(),
+            // One phrase per action ("Pause …", "Play …", "Resume …", "Play or pause …"),
+            // so "Pause" can never start playback.
             phrases: [
-                "Pause \(.applicationName)",
-                "Play \(.applicationName)",
-                "Play or pause \(.applicationName)",
+                "\(\.$action) \(.applicationName)",
             ],
             shortTitle: "Play or Pause",
             systemImageName: "playpause.fill")

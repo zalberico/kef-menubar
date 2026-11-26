@@ -84,6 +84,7 @@ struct NowPlayingView: View {
 
     @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.colorScheme) private var systemColorScheme
 
     var body: some View {
         content
@@ -104,8 +105,9 @@ struct NowPlayingView: View {
         }
     }
 
-    /// Light text on the teal background; tinted and clear modes keep the system's.
-    private var fullColorScheme: ColorScheme { renderingMode == .fullColor ? .dark : .light }
+    /// Light text on the teal background; tinted and clear modes (and StandBy at night)
+    /// keep the system's.
+    private var fullColorScheme: ColorScheme { renderingMode == .fullColor ? .dark : systemColorScheme }
 }
 
 /// The icon's teal, slate grey when asleep (like ``CabinetTile``).
@@ -123,9 +125,12 @@ private struct TealBackground: View {
 }
 
 /// The track's artwork, else the cabinet itself (the widget is already the icon's teal),
-/// asleep in standby and offline.
+/// asleep in standby and offline. Tinted and clear Home Screens and StandBy at night draw
+/// in one colour, so there the cabinet is the monochrome glyph.
 private struct ArtworkTile: View {
     let entry: NowPlayingEntry
+
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
         if let artwork = entry.artwork, entry.status == .on {
@@ -136,11 +141,25 @@ private struct ArtworkTile: View {
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(CabinetTileShape())
-        } else {
+        } else if renderingMode == .fullColor {
             CabinetArt(isAsleep: entry.status != .on)
                 .shadow(color: .black.opacity(0.25), radius: 6, y: 4)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .aspectRatio(1, contentMode: .fit)
+        } else {
+            SpeakerGlyph(style: glyphStyle)
+                .padding(4)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .aspectRatio(1, contentMode: .fit)
+                .widgetAccentable(entry.status == .on)
+        }
+    }
+
+    private var glyphStyle: SpeakerGlyphShape.Style {
+        switch entry.status {
+        case .on: .on
+        case .offline: .offline
+        case .standby, .noSpeaker: .standby
         }
     }
 }
@@ -264,6 +283,7 @@ private struct MediumView: View {
                         Image(systemName: snapshot.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(WidgetButtonStyle(isActive: snapshot.muted))
                     .accessibilityLabel(snapshot.muted ? "Unmute" : "Mute")
                     Button(intent: WidgetVolumeUpIntent()) {
                         Image(systemName: "plus").frame(maxWidth: .infinity)
@@ -283,14 +303,43 @@ private struct MediumView: View {
     }
 }
 
-/// Round-cornered buttons on the teal, the middle one tinted saffron when muted.
+/// Round-cornered buttons on the teal; an active one (Mute while muted) is filled saffron,
+/// or, where the widget draws in one colour, outlined.
 private struct WidgetButtonStyle: ButtonStyle {
+    var isActive = false
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .frame(height: 30)
-            .background(.white.opacity(configuration.isPressed ? 0.28 : 0.16), in: Capsule())
-            .contentShape(Capsule())
+        ActiveFill(isActive: isActive, isPressed: configuration.isPressed) {
+            configuration.label
+        }
+    }
+
+    private struct ActiveFill<Label: View>: View {
+        let isActive: Bool
+        let isPressed: Bool
+        @ViewBuilder let label: Label
+
+        @Environment(\.widgetRenderingMode) private var renderingMode
+
+        var body: some View {
+            let saffron = isActive && renderingMode == .fullColor
+            label
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(saffron ? AnyShapeStyle(.black.opacity(0.8)) : AnyShapeStyle(.foreground))
+                .frame(height: 30)
+                .background {
+                    Capsule()
+                        .fill(saffron ? AnyShapeStyle(Color("AccentColor")) : AnyShapeStyle(.white.opacity(isPressed ? 0.28 : 0.16)))
+                        .opacity(saffron && isPressed ? 0.8 : 1)
+                }
+                .overlay {
+                    // One colour (tinted, clear, StandBy): a fill would wash out the glyph, so an outline.
+                    if isActive && !saffron {
+                        Capsule().strokeBorder(.white.opacity(0.9), lineWidth: 1.5)
+                    }
+                }
+                .contentShape(Capsule())
+        }
     }
 }
 
