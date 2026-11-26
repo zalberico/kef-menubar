@@ -92,6 +92,12 @@ jobs:
       - name: Test
         run: swift test
 
+      # The Mac App Store build (macOS/Speakeasy.xcodeproj) compiles these sources with APPSTORE
+      # set, and isn't built here. Compile its code paths too, so a change that breaks them
+      # fails CI. Its own scratch path keeps this from rebuilding the main build's products.
+      - name: Compile the App Store code paths
+        run: swift build --product KEFMenuBar -Xswiftc -DAPPSTORE --scratch-path .build/appstore
+
       - name: Import Developer ID certificate
         if: env.DEVELOPER_ID_P12 != ''
         run: |

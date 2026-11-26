@@ -404,7 +404,7 @@ copies keep their settings and updates.
 | `Sources/KEFMenuBar` | The Mac app: menu bar extra, Settings, hot keys, volume overlay, menu bar icon drawing. Both Mac builds compile it. |
 | `Sources/kefctl` | The CLI above. |
 | `Tests/KEFKitTests`, `Tests/KEFAppCoreTests` | Swift Testing suites. The tests never touch a real speaker. |
-| `macOS/` | The Mac App Store build: `Speakeasy.xcodeproj` (scheme **Speakeasy**), build settings, entitlements and privacy manifest (`Config/`), and the icon catalog (`Resources/`). |
+| `macOS/` | The Mac App Store build: `Speakeasy.xcodeproj` (scheme **Speakeasy**), build settings and entitlements (`Config/`), and the icon catalog and privacy manifest (`Resources/`). |
 | `iOS/` | The iPhone app: `Remote.xcodeproj` (scheme **Remote**), the app (`App/`), the widget and controls extension (`Widgets/`), code both use (`Shared/`) and build settings (`Config/`). |
 | `scripts/build-app.sh` | Builds, signs and optionally installs the GitHub build, `Speakeasy.app`, with Sparkle embedded. |
 | `scripts/make-appcast.sh` | Signs a release zip with the Sparkle key and writes its `appcast.xml`. |
