@@ -91,10 +91,12 @@ public struct SnapshotStore: Sendable {
 
     /// Write a snapshot with its artwork: the image when there is one (stored under the
     /// snapshot's key, before the snapshot), else none. Older artwork is removed afterwards.
+    /// Art already stored under the key isn't encoded again: the key is a hash of the
+    /// artwork's URL, so that file already holds this image.
     public func write(_ snapshot: SpeakerSnapshot, artwork: CGImage?) throws {
         var snapshot = snapshot
         if let artwork, let key = snapshot.artworkKey, artworkURL(for: key) != nil {
-            try writeArtwork(artwork, key: key)
+            if !hasArtwork(key) { try writeArtwork(artwork, key: key) }
         } else {
             snapshot.artworkKey = nil
         }

@@ -67,6 +67,24 @@ struct SnapshotStoreTests {
         }
     }
 
+    /// A write for the same track (a volume or mute change) leaves the stored art file as it
+    /// is instead of encoding and rewriting it.
+    @Test func sameArtworkIsNotRewritten() throws {
+        try withStore { store in
+            try store.write(Self.sample, artwork: Self.image(width: 64, height: 64))
+            let url = try #require(store.artworkURL(for: "abc123"))
+            let marker = Date(timeIntervalSince1970: 1_000_000_000)
+            try FileManager.default.setAttributes([.modificationDate: marker], ofItemAtPath: url.path)
+            var louder = Self.sample
+            louder.volume = 30
+            try store.write(louder, artwork: Self.image(width: 64, height: 64))
+            let modified = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
+            #expect(modified == marker)
+            #expect(store.read()?.volume == 30 && store.read()?.artworkKey == "abc123")
+            #expect(store.readArtwork(key: "abc123") != nil)
+        }
+    }
+
     static func artworkFiles(_ store: SnapshotStore) -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: store.containerURL.path)) ?? [])
             .filter { $0.hasPrefix("artwork") }.sorted()
