@@ -21,9 +21,12 @@ It talks to the speaker's own local API, the same one KEF Connect uses. Nothing 
 through KEF's servers. The only third-party code is [Sparkle](https://sparkle-project.org),
 which the Mac app uses to update itself.
 
-<p align="center">
-  <img src="docs/panel.png" width="354" alt="The Speakeasy panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
-</p>
+<table align="center">
+  <tr>
+    <td align="center" valign="top"><img src="docs/panel.png" width="330" alt="The Speakeasy panel in light mode: speaker name Living Room on Wi-Fi / AirPlay with the power button, volume at 24, input tiles with Wi-Fi selected, the now playing card with album art, Corner Booth by The Speakeasy Trio and play controls, subwoofer level, the collapsed Sound section, a firmware update notice, and Settings and Quit"><br><sub>The menu bar panel</sub></td>
+    <td align="center" valign="top"><img src="docs/panel-sound-dark.png" width="330" alt="The panel in dark mode with Sound expanded: treble, bass extension, desk mode with its level, wall mode, balance, phase correction, number of subwoofers, sub model KEF KC62, sub crossover, speaker high-pass, sub polarity and subwoofer output"><br><sub>Sound, in dark mode</sub></td>
+  </tr>
+</table>
 
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
 > Other W2-platform models should work but are untested. Reports and PRs are welcome.
