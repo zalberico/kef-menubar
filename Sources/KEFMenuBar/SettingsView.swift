@@ -21,9 +21,10 @@ struct SettingsView: View {
     }
 }
 
-/// Connection, shortcuts and launch at login.
+/// Connection, shortcuts, launch at login and app updates.
 private struct GeneralSettingsTab: View {
     @Environment(SpeakerModel.self) private var model
+    @Environment(AppUpdater.self) private var updater
     @State private var manualHost = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginStatus = LaunchAtLogin.status
@@ -86,6 +87,16 @@ private struct GeneralSettingsTab: View {
                 }
                 if let loginError {
                     Text(loginError).font(.caption).foregroundStyle(.red)
+                }
+            }
+
+            Section("Updates") {
+                Toggle("Automatically check for updates", isOn: Binding(
+                    get: { updater.automaticallyChecksForUpdates },
+                    set: { updater.setAutomaticallyChecksForUpdates($0) }))
+                LabeledContent("Version \(AppUpdater.currentVersion)") {
+                    Button("Check for Updates…") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheckForUpdates)
                 }
             }
         }

@@ -11,6 +11,7 @@ struct KEFMenuBarApp: App {
         MenuBarExtra {
             PopoverView()
                 .environment(appDelegate.model)
+                .environment(appDelegate.updater)
         } label: {
             MenuBarIcon(model: appDelegate.model)
         }
@@ -19,6 +20,7 @@ struct KEFMenuBarApp: App {
         Settings {
             SettingsView()
                 .environment(appDelegate.model)
+                .environment(appDelegate.updater)
         }
     }
 }
@@ -27,6 +29,8 @@ struct KEFMenuBarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let preferences = Preferences()
     lazy var model = SpeakerModel(preferences: preferences)
+    /// Sparkle starts with the app, so scheduled checks (once allowed) run from launch.
+    let updater = AppUpdater()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.start()
