@@ -22,7 +22,9 @@ final class AppUpdater: NSObject {
 
     override init() {
         super.init()
-        controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
+        // Started by start(), after the launch has settled whether this copy stays put (a copy
+        // about to move itself into Applications shouldn't count as Sparkle's first launch).
+        controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: self)
         let updater = controller.updater
         canCheckForUpdates = updater.canCheckForUpdates
         automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
@@ -34,6 +36,10 @@ final class AppUpdater: NSObject {
                 MainActor.assumeIsolated { self?.automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates }
             },
         ]
+    }
+
+    func start() {
+        controller.startUpdater()
     }
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
