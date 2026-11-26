@@ -19,7 +19,7 @@ struct PanelStack: View {
                     if isSheet {
                         ToolbarItem(placement: .topBarLeading) {
                             Button(role: .close) {
-                                ui.isSheetPresented = false
+                                ui.closeSheet()
                             }
                         }
                     }
@@ -39,9 +39,7 @@ private struct PanelContent: View {
     var body: some View {
         switch panel {
         case .speakers: SpeakersPanel()
-        case .sound:
-            PanelPlaceholder(title: "Sound", symbol: "slider.horizontal.3",
-                             message: "Sound settings arrive in the next build.")
+        case .sound: SoundPanel()
         case .settings: SettingsPlaceholder()
         }
     }

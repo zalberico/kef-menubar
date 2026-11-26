@@ -29,6 +29,11 @@ final class UIState {
     /// Scroll positions, restored when a layout change rebuilds a scroll view.
     var remoteScroll = ScrollPosition(edge: .top)
     var panelScroll = ScrollPosition(edge: .top)
+    var soundScroll = ScrollPosition(edge: .top)
+    /// How far Sound is scrolled. `ScrollPosition` doesn't record where the person scrolled
+    /// to, so it is tracked here and scrolled back to when the panel moves between the
+    /// sheet and the column. Closing the sheet starts it at the top again.
+    var soundOffset: CGFloat = 0
 
     /// The manual address being typed (Speakers and onboarding).
     var manualHostDraft = ""
@@ -64,14 +69,20 @@ final class UIState {
         Binding(
             get: { [unowned self] in !isWide && self.isSheetPresented && self.panel != nil },
             set: { [unowned self] presented in
-                if presented { self.isSheetPresented = true } else if !isWide { self.isSheetPresented = false }
+                if presented { self.isSheetPresented = true } else if !isWide { self.closeSheet() }
             })
+    }
+
+    /// The person closed the sheet (Close, or swiping it away).
+    func closeSheet() {
+        isSheetPresented = false
+        soundOffset = 0
     }
 
     /// A connection change the person asked for (another speaker, an address).
     func connectionChosen() {
         showsOffline = false
         lastOfflineReason = nil
-        isSheetPresented = false
+        closeSheet()
     }
 }
