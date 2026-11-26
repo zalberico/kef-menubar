@@ -88,8 +88,7 @@ struct ArtworkView: View {
                         .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
                         .transition(.opacity)
                 } else {
-                    CabinetArt(isAsleep: isAsleep)
-                        .padding(.vertical, 4)
+                    CabinetTile(isAsleep: isAsleep)
                         .transition(.opacity)
                 }
             }

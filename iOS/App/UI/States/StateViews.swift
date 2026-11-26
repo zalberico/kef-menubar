@@ -14,7 +14,7 @@ struct OnboardingView: View {
         ScrollView {
             VStack(spacing: 28) {
                 VStack(spacing: 14) {
-                    CabinetArt()
+                    CabinetTile()
                         .frame(height: min(cabinetHeight, 200))
                     Text("Find your speaker")
                         .font(.largeTitle.bold())
@@ -155,17 +155,15 @@ struct OfflineView: View {
             // Not a Label: its icon slot would shrink the cabinet to symbol size.
             let height = min(cabinetHeight, 180)
             VStack(spacing: 14) {
-                CabinetArt(isAsleep: true)
-                    .frame(width: height * CabinetArt.aspectRatio, height: height)
+                CabinetTile(isAsleep: true)
+                    .frame(width: height, height: height)
                     .overlay(alignment: .bottomTrailing) {
-                        // Centred on the cabinet's lower right corner (12.5 and 17.5 of
-                        // the image's 16 × 20 units).
+                        // On the tile's lower right corner.
                         Image(systemName: "exclamationmark.circle.fill")
-                            .font(.title2)
+                            .font(.title)
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .orange)
-                            .alignmentGuide(.trailing) { $0[HorizontalAlignment.center] + height * 0.8 * 3.5 / 16 }
-                            .alignmentGuide(.bottom) { $0[VerticalAlignment.center] + height * 2.5 / 20 }
+                            .offset(x: 8, y: 8)
                     }
                 Text(title)
                     .font(.title2.bold())

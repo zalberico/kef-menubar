@@ -209,6 +209,7 @@ struct PowerButton: View {
 /// A soft wash behind the remote: the artwork blurred, or the accent colour.
 private struct RemoteBackdrop: View {
     @Environment(SpeakerModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let artwork = model.displaysNowPlaying ? model.artwork : nil
@@ -226,8 +227,11 @@ private struct RemoteBackdrop: View {
                     .opacity(0.45)
                     .transition(.opacity)
             } else {
-                LinearGradient(colors: [Color.accentColor.opacity(0.18), .clear],
-                               startPoint: .top, endPoint: .center)
+                // No artwork: the icon's teal, pale in light mode and deep ink in dark.
+                LinearGradient(colors: [colorScheme == .dark ? BrandTeal.top.opacity(0.75)
+                                                             : BrandTeal.glow.opacity(0.22),
+                                        .clear],
+                               startPoint: .top, endPoint: .bottom)
             }
         }
         .animation(.easeInOut(duration: 0.6), value: model.artworkKey)
