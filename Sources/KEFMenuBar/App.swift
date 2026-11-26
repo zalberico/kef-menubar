@@ -45,6 +45,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKeyCenter.shared.handler = { [weak self] action in self?.perform(action) }
         HotKeyCenter.shared.registerAll = { [preferences] in Self.registerHotKeys(preferences) }
         Self.registerHotKeys(preferences)
+        #if DEBUG
+        #if APPSTORE
+        let panel = AnyView(PopoverView().environment(model))
+        #else
+        let panel = AnyView(PopoverView().environment(model).environment(updater))
+        #endif
+        DemoScenes.start(model: model, panel: panel)
+        #endif
     }
 
     private static func makeModel() -> SpeakerModel {
