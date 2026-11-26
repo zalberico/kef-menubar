@@ -4,8 +4,9 @@
 // Contents.json of a single-size iOS AppIcon with appearances.
 //
 // The same drawing, without the teal ground, is the app's full-colour cabinet art: the
-// cabinet alone on a transparent background with a soft contact shadow, at 160 x 200 pt
+// cabinet alone on a transparent background with a soft contact shadow, at 320 x 400 pt
 // (1x, 2x, 3x), light and dark (the dark icon's deeper saffron), as SpeakerCabinet.imageset.
+// That is the hero's largest square (400 pt), so the art is only ever scaled down.
 //
 // Run: swift scripts/make-ios-icon.swift iOS/App/Assets.xcassets
 // It writes AppIcon.appiconset and SpeakerCabinet.imageset inside the catalog; the icon
@@ -372,11 +373,13 @@ print("wrote \(icons.map(\.file).joined(separator: ", ")) and Contents.json to \
 
 // MARK: - Cabinet art
 
-/// The cabinet alone: 16 x 20 grid units (10 pt each), the cabinet centred across and 1.5
-/// units from the top, room below for its shadows, on a transparent background.
+/// The cabinet alone: 16 x 20 grid units (20 pt each, so 320 x 400 pt: the hero's largest
+/// square holds it at full size), the cabinet centred across and 1.5 units from the top,
+/// room below for its shadows, on a transparent background.
 func renderCabinet(_ p: Palette, scale: Int) -> CGImage {
-    let u = CGFloat(10 * scale)
-    let ctx = makeContext(16 * 10 * scale, 20 * 10 * scale, opaque: false)
+    let unit = 20
+    let u = CGFloat(unit * scale)
+    let ctx = makeContext(16 * unit * scale, 20 * unit * scale, opaque: false)
     drawCabinet(ctx, u: u, ox: 1.5 * u, oy: 1.5 * u, p: p, ground: 0.6)
     return ctx.makeImage()!
 }

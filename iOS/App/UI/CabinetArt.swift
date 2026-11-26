@@ -28,7 +28,8 @@ struct CabinetArt: View {
     }
 }
 
-/// Width over height of ``CabinetArt``'s image (160 × 200 pt, room for its shadow below).
+/// Width over height of ``CabinetArt``'s image (320 × 400 pt, room for its shadow below;
+/// as big as the hero's largest square, so it is only ever scaled down).
 extension CabinetArt {
     static let aspectRatio: CGFloat = 0.8
 }
