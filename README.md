@@ -166,7 +166,7 @@ The app updates itself with [Sparkle](https://sparkle-project.org). The second t
 open it, it asks whether to check for updates automatically; you can change that later
 in **Settings… › General › Updates**, and **Check for Updates…** in the panel or in
 Settings checks right away. When an update is found you see what's new and choose
-whether to install it.
+whether to install it. The app never downloads or installs an update without asking.
 
 A check downloads one small file, `appcast.xml`, from the latest GitHub release. Nothing
 is sent about you or your Mac: no analytics and no system profile. Each update is signed
@@ -220,8 +220,10 @@ Privacy & Security › **Open Anyway**.
 
 With the `SPARKLE_ED_PRIVATE_KEY` secret, the workflow also signs the zip with Sparkle's
 `sign_update` and attaches an `appcast.xml` for it (`scripts/make-appcast.sh`), which is
-how installed copies find the update. Without the secret the release is published
-without an appcast, and the workflow says so.
+how installed copies find the update. Installed copies check this repository's latest
+release, so here a tag build fails rather than publish a release without an appcast or
+one that isn't signed with Developer ID and notarized. In a fork, whose releases no
+installed copy checks, the release is published without an appcast, and the workflow says so.
 
 ## Using it
 

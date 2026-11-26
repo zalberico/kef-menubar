@@ -38,12 +38,17 @@
 	</array>
 	<!-- Sparkle auto-updates. Sparkle asks before it checks automatically (on the second
 	     launch); a check only fetches appcast.xml from the latest GitHub release. Updates
-	     must be signed with the EdDSA key matching SUPublicEDKey (see the README). -->
+	     must be signed with the EdDSA key matching SUPublicEDKey (see the README).
+	     SUAllowsAutomaticUpdates is off so an update is always shown and installed only when
+	     asked: Sparkle hides its "Automatically download and install updates" box and ignores
+	     a SUAutomaticallyUpdate default saved earlier. -->
 	<key>SUFeedURL</key>
 	<string>https://github.com/zalberico/kef-menubar/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>JMEgDbzVQlIU9k69b924/o2KP90c1e345Ktw9+FBwkA=</string>
 	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
