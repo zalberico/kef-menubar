@@ -18,7 +18,8 @@ volume. There's also an [iPhone app, Speakeasy](#iphone-app-speakeasy), built on
 code.
 
 It talks to the speaker's own local API, the same one KEF Connect uses. Nothing goes
-through KEF's servers, and there are no third-party dependencies.
+through KEF's servers. The only third-party code is [Sparkle](https://sparkle-project.org),
+which the Mac app uses to update itself.
 
 <p align="center">
   <img src="docs/panel.png" width="354" alt="The KEF Menu Bar panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
@@ -121,7 +122,8 @@ your local network.
   install one after a confirmation. The panel tells you when an update is available.
 - **App settings:** Bonjour discovery or a fixed IP address, shortcut volume step and
   overlay, launch at login
-- **Native and light:** SwiftUI, light and dark mode, no Dock icon, about 2 MB
+- **Updates itself** with Sparkle, after asking you first (see [Updates](#updates))
+- **Native and light:** SwiftUI, light and dark mode, no Dock icon, under 5 MB
 
 The menu bar icon is a little bookshelf speaker with KEF's Uni-Q driver, not Apple's
 speaker symbol, so you can tell it apart from the system volume:
@@ -158,7 +160,19 @@ This section is for the Mac app. For the iPhone app, see
    the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
    Privacy & Security › Local Network.
 
-To update, download the new release and replace the app in Applications.
+#### Updates
+
+The app updates itself with [Sparkle](https://sparkle-project.org). The second time you
+open it, it asks whether to check for updates automatically; you can change that later
+in **Settings… › General › Updates**, and **Check for Updates…** in the panel or in
+Settings checks right away. When an update is found you see what's new and choose
+whether to install it.
+
+A check downloads one small file, `appcast.xml`, from the latest GitHub release. Nothing
+is sent about you or your Mac: no analytics and no system profile. Each update is signed
+with the project's EdDSA key, which the app checks before installing, on top of Apple's
+Developer ID signature and notarization. Version 1.1.0 and earlier don't have this, so
+download the first release with updates by hand.
 
 The app finds your speaker with Bonjour. If it doesn't, open **Settings…** from the
 panel and enter the speaker's IP address. You'll find the address in KEF Connect under the
@@ -186,7 +200,9 @@ If you'd rather build from source, it takes about a minute.
    ad-hoc otherwise; set `CODESIGN_IDENTITY` to override.
 4. Allow **Local Network** access on first launch, as above.
 
-To update later, run `git pull` and `scripts/build-app.sh --install` again.
+To update later, run `git pull` and `scripts/build-app.sh --install` again. A copy you
+build yourself still offers updates from the GitHub releases, which replace it with the
+released app; turn off **Automatically check for updates** if you'd rather not.
 
 ### Making a release
 
@@ -202,6 +218,11 @@ listed at the top of the workflow. Without those secrets (in a fork, say) it fal
 an ad-hoc signature, and macOS then makes people allow the app once in System Settings ›
 Privacy & Security › **Open Anyway**.
 
+With the `SPARKLE_ED_PRIVATE_KEY` secret, the workflow also signs the zip with Sparkle's
+`sign_update` and attaches an `appcast.xml` for it (`scripts/make-appcast.sh`), which is
+how installed copies find the update. Without the secret the release is published
+without an appcast, and the workflow says so.
+
 ## Using it
 
 Click the speaker in the menu bar for the panel: power, volume, inputs, now playing, sub
@@ -214,7 +235,7 @@ on, including **Sub model** › **Restore**, which puts the sub gain, crossover 
 high-pass back to KEF's defaults for your subwoofer.
 
 **Settings…** has two tabs. **General** covers the app itself: which speaker, the keyboard
-shortcuts and launch at login. **Speaker** covers settings stored on the speaker: name,
+shortcuts, launch at login and updates. **Speaker** covers settings stored on the speaker: name,
 standby and wake, startup volume, volume limit, lights, the remote and firmware.
 
 ## Command line: `kefctl`
@@ -267,8 +288,11 @@ the volume above it. The volume limit, firmware and everything else in Settings 
 the app.
 
 **Does it phone home?** No. Neither app has analytics or accounts, and both talk only to
-your speaker. The one exception is album art, which they load from whatever address the
-speaker reports for the current track, sometimes a streaming service's image server.
+your speaker, with two exceptions. Album art loads from whatever address the speaker
+reports for the current track, sometimes a streaming service's image server. And the Mac
+app's update checks, once you've allowed them or when you click **Check for Updates…**,
+fetch `appcast.xml` from GitHub, which sees your IP address like any download; Sparkle's
+optional system profile is turned off, so nothing else is sent.
 
 **Multiple speakers?** The Mac app controls one speaker (a stereo pair counts as one). You
 can pick which one in Settings, and the app then sticks to that speaker by its MAC address,
@@ -343,13 +367,29 @@ xcodebuild -project iOS/Remote.xcodeproj -scheme Remote \
 | `Sources/kefctl` | The CLI above. |
 | `Tests/KEFKitTests`, `Tests/KEFAppCoreTests` | Swift Testing suites. The tests never touch a real speaker. |
 | `iOS/` | The iPhone app: `Remote.xcodeproj` (scheme **Remote**), the app (`App/`), the widget and controls extension (`Widgets/`), code both use (`Shared/`) and build settings (`Config/`). |
-| `scripts/build-app.sh` | Builds, signs and optionally installs the Mac `.app`. |
+| `scripts/build-app.sh` | Builds, signs and optionally installs the Mac `.app`, with Sparkle embedded. |
+| `scripts/make-appcast.sh` | Signs a release zip with the Sparkle key and writes its `appcast.xml`. |
 | `scripts/make-icon.swift` | Renders `Resources/AppIcon.icns` from the same drawing as the menu bar icon. |
 | `scripts/make-ios-icon.swift` | Renders the iPhone app icon and its speaker art into `iOS/App/Assets.xcassets`. |
 | `scripts/signing_vectors.py` | Regenerates the signing test vectors from a pykefcontrol wheel. |
 
 Debug builds of the iPhone app take a `-DemoSpeaker` launch argument: a made-up speaker,
 served in-process, so nothing touches the network. The screenshots above come from it.
+
+**Update signing key.** Sparkle checks updates against `SUPublicEDKey` in
+`Resources/Info.plist`. The matching private key is in the maintainer's login keychain
+(account `kef-menubar`) and in the `SPARKLE_ED_PRIVATE_KEY` repository secret. Sparkle's
+tools come with the package, under `.build/artifacts/sparkle/Sparkle/bin` after
+`swift package resolve`. To rotate the key:
+
+1. `generate_keys --account kef-menubar-2` makes a new pair and prints the public key.
+2. Put the new public key in `Info.plist` and release that version while the secret still
+   holds the old key, so installed copies accept it.
+3. Then export the new private key (`generate_keys --account kef-menubar-2 -x key.txt`),
+   replace the secret with it, and delete the file.
+
+If the private key is ever lost, installed copies can't verify new updates, and people
+have to download the next release by hand once.
 
 If you test against your own speaker, start with read-only commands (`state`, `get`,
 `rows`, `watch`) before writing anything.
