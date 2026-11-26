@@ -2,7 +2,8 @@
 #
 #   git tag v1.2.0 && git push origin v1.2.0   -> GitHub Release v1.2.0 with KEF-Menu-Bar-1.2.0.zip
 #   Actions > Release > Run workflow           -> test build, downloadable from the run's artifacts
-#   A pull request that changes this file or the build script also gets a test build.
+#   A pull request that changes the package, sources, tests, this file or the build script
+#   also gets a test build (signed and notarized when the secrets are available; never published).
 #
 # Signing: with the Developer ID secrets below the app is signed with Developer ID,
 # notarized and stapled, so it opens with no warning. Without them it is ad-hoc signed
