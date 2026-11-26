@@ -8,7 +8,8 @@ import KEFKit
 /// Debug only: the `-DemoSpeaker` launch argument shows a made-up speaker ("Living Room",
 /// playing a placeholder track, one KC62 sub) for screenshots; add `-DemoVolumeLimit 40`
 /// to turn its volume limit on, and `-DemoSource tv` (any input, or `standby`) to start on
-/// another input; `-DemoKW1 YES` puts the sub on a KW1 wireless kit (no T2 defaults).
+/// another input; `-DemoKW1 YES` puts the sub on a KW1 wireless kit (no T2 defaults), and
+/// `-DemoNoEQ YES` makes the speaker fail every EQ profile read.
 /// Its client talks to an in-process fake through a URLProtocol, discovery finds nothing,
 /// and its preferences live in their own suite, so nothing touches the network, the App
 /// Group or the real speaker's settings.
@@ -62,7 +63,9 @@ final class DemoSpeakerState: @unchecked Sendable {
         let limit = UserDefaults.standard.integer(forKey: "DemoVolumeLimit")
         set(KEFPath.maximumVolume, typed: "i32_", String((1...100).contains(limit) ? limit : 100))
         set(KEFPath.volumeLimit, typed: "bool_", (1...100).contains(limit) ? "true" : "false")
-        set(KEFPath.eqProfileV2, typed: ValueType.eqProfileV2, Self.eqProfile)
+        if !UserDefaults.standard.bool(forKey: "DemoNoEQ") {
+            set(KEFPath.eqProfileV2, typed: ValueType.eqProfileV2, Self.eqProfile)
+        }
     }
 
     /// An LSX II profile with one KEF KC62 sub at its defaults, desk mode on: the shape a
