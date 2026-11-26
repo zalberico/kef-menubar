@@ -47,11 +47,12 @@ enum SpeakerAccess {
 
     /// Run one operation for an intent and return its outcome and reply. Failures are
     /// thrown as ``SpeakerIntentError`` with a reply that says what went wrong.
-    /// With `refresh`, the speaker is read again after the change (within what is left of
-    /// the deadline), for changes that move more than the outcome says: switching input or
-    /// power changes the track and can change the volume (the speaker keeps one per input).
+    /// When `refresh` says so for the outcome, the speaker is read again after the change
+    /// (within what is left of the deadline), for changes that move more than the outcome
+    /// says: switching input or power changes the track and can change the volume (the
+    /// speaker keeps one per input). An outcome that sent nothing needs no wait and no read.
     static func perform<Outcome: Sendable>(
-        refresh: Bool = false,
+        refresh: (Outcome) -> Bool = { _ in false },
         _ operation: @Sendable (SpeakerCommand) async throws -> Outcome,
         apply: (inout SpeakerSnapshot, Outcome) -> Void,
         reply: (SpeakerDialog, Outcome) -> String
@@ -64,7 +65,7 @@ enum SpeakerAccess {
             var fresh: SpeakerSnapshot?
             do {
                 outcome = try await operation(command)
-                if refresh {
+                if refresh(outcome) {
                     // The speaker moves to that input's own volume a moment after switching.
                     try? await Task.sleep(for: settleDelay)
                     fresh = try? await command.snapshot()
@@ -154,13 +155,13 @@ enum SpeakerActions {
     }
 
     static func setPower(_ on: Bool) async throws -> (outcome: PowerOutcome, reply: String) {
-        try await SpeakerAccess.perform(refresh: true, { try await $0.setPower(on) }, apply: { $0.apply($1) }, reply: { $0.power($1) })
+        try await SpeakerAccess.perform(refresh: { $0.wrote }, { try await $0.setPower(on) }, apply: { $0.apply($1) }, reply: { $0.power($1) })
     }
 
     /// `select` refuses an input this model doesn't have, before sending anything.
     static func select(_ input: SpeakerInput) async throws -> (outcome: InputOutcome, reply: String) {
         let source = input.source
-        return try await SpeakerAccess.perform(refresh: true, { try await $0.select(source) }, apply: { $0.apply($1) }, reply: { $0.input($1) })
+        return try await SpeakerAccess.perform(refresh: { $0.wrote }, { try await $0.select(source) }, apply: { $0.apply($1) }, reply: { $0.input($1) })
     }
 
     static func playPause(_ request: PlaybackRequest) async throws -> (outcome: PlaybackOutcome, reply: String) {
