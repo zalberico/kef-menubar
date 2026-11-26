@@ -197,8 +197,8 @@ a good idea either way.
 ### Mac App Store
 
 Speakeasy for Mac has been submitted to the Mac App Store, on the same listing as the
-iPhone app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps it up to
-date. Until it's out, use the download above.
+iPhone app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps
+it up to date. Until it's out, use the download above.
 
 ### Build it yourself
 
