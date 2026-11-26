@@ -42,7 +42,8 @@ public actor SnapshotReader {
         if let inFlight { return await inFlight.value }
         let stored = store.read()
         let date = now()
-        if let stored, date.timeIntervalSince(stored.updatedAt) < maxAge {
+        // A snapshot from the future (the clock moved back since it was written) isn't fresh.
+        if let stored, (0..<maxAge).contains(date.timeIntervalSince(stored.updatedAt)) {
             return Reading(snapshot: stored, isFresh: true)
         }
         if let attempt = store.lastReadAttempt(), abs(date.timeIntervalSince(attempt)) < maxAge {
@@ -112,7 +113,7 @@ extension SpeakerSnapshot {
         volume = outcome.applied
         ceiling = outcome.ceiling
         muted = outcome.muted
-        isOn = true
+        // Power is left alone: a volume change neither reads nor changes it.
     }
 
     public mutating func apply(_ outcome: MuteOutcome) {

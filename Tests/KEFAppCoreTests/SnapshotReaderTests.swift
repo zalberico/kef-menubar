@@ -171,6 +171,34 @@ struct SnapshotReaderTests {
         }
     }
 
+    /// A volume change (Siri, Shortcuts) while the speaker is in standby says nothing about
+    /// power: the stored snapshot stays off.
+    @Test func aVolumeOutcomeLeavesPowerAlone() async throws {
+        try await withStore { store in
+            var standby = Self.snapshot(at: Self.start)
+            standby.isOn = false
+            standby.source = "standby"
+            try store.write(standby)
+            store.apply {
+                $0.apply(VolumeOutcome(speakerName: "Living Room", requested: 30, previous: 24, applied: 30, ceiling: 100,
+                                       limited: false, clamped: false, muted: false, unmuted: false, wrote: true))
+            }
+            let stored = try #require(store.read())
+            #expect(stored.volume == 30 && !stored.isOn && stored.source == "standby")
+        }
+    }
+
+    /// The clock moved back after the snapshot was written: it isn't served as fresh for the
+    /// size of the jump, the speaker is read.
+    @Test func aSnapshotFromTheFutureIsReadAgain() async throws {
+        try await withStore { store in
+            try store.write(Self.snapshot(volume: 12, at: Self.start.addingTimeInterval(3600)))
+            let reader = SnapshotReader(store: store, now: { Self.start })
+            let reading = await reader.current { Self.snapshot(volume: 20, at: Self.start) }
+            #expect(reading.isFresh && reading.snapshot?.volume == 20)
+        }
+    }
+
     @Test func outcomesNeedAStoredSnapshot() async throws {
         try await withStore { store in
             store.apply { $0.apply(MuteOutcome(speakerName: "Living Room", muted: true, wrote: true)) }
