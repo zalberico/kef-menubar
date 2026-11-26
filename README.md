@@ -18,8 +18,9 @@ for volume. (Up to version 1.2 the Mac app was called KEF Menu Bar.) There's als
 [iPhone app](#iphone-app-speakeasy) of the same name, built on the same code.
 
 It talks to the speaker's own local API, the same one KEF Connect uses. Nothing goes
-through KEF's servers. The only third-party code is [Sparkle](https://sparkle-project.org),
-which the Mac app uses to update itself.
+through KEF's servers. If the speaker is wired to your router, you don't need KEF Connect
+at all, not even for setup or firmware updates (see the [FAQ](#faq)). The only third-party
+code is [Sparkle](https://sparkle-project.org), which the Mac app uses to update itself.
 
 <table align="center">
   <tr>
@@ -189,10 +190,10 @@ with the project's EdDSA key, which the app checks before installing, on top of 
 Developer ID signature and notarization. Version 1.1.0 and earlier don't have this, so
 download the first release with updates by hand.
 
-The app finds your speaker with Bonjour. If it doesn't, open **Settings…** from the
-panel and enter the speaker's IP address. You'll find the address in KEF Connect under the
-speaker's settings, or in your router's client list. A DHCP reservation for the speaker is
-a good idea either way.
+The app finds your speaker with Bonjour. If it doesn't, open **Settings…** from the panel
+and enter the speaker's IP address. You'll find the address in your router's client list,
+or in KEF Connect under the speaker's settings if you use it. A DHCP reservation for the
+speaker is a good idea either way.
 
 ### Mac App Store
 
@@ -288,13 +289,16 @@ $K 192.0.2.20 firmware check     # ask the speaker to look for an update (instal
 
 ## FAQ
 
-**Do I still need KEF Connect?** Only for initial setup and network changes (Wi-Fi,
-pairing), and for its streaming-service browsing. Everything on KEF Connect's settings
+**Do I still need KEF Connect?** Not if the speaker is plugged into your router with an
+Ethernet cable. A wired speaker joins your network by itself, with no setup in KEF
+Connect, and Speakeasy finds it; we've checked this on an LSX II. KEF Connect is only
+needed to put a speaker on Wi-Fi without a cable, for other network changes such as
+pairing, and for its streaming-service browsing. Everything on KEF Connect's settings
 screens that a desktop speaker needs is under **Settings › Speaker** on the Mac and
 **Settings** on the iPhone, and firmware updates are there too: **Check Now** asks the
 speaker to look for one, and **Update…** installs it after you confirm. The speaker then
-restarts and is unreachable for a few minutes. It also checks by itself every few hours and
-can install updates while idle, so you may never need the button.
+restarts and is unreachable for a few minutes. It also checks by itself every few hours
+and can install updates while idle, so you may never need the button.
 
 **Is it safe to point at my speakers?** Both apps read state and change the same everyday
 settings KEF Connect does: volume, mute, input, playback, EQ, the volume limit and the
