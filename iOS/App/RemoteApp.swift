@@ -21,6 +21,7 @@ struct RemoteApp: App {
         } else {
             model = Self.makeModel()
         }
+        DemoSpeaker.setIntentsUseDemo(isDemo && DemoSpeaker.intentsArgument)
         #else
         model = Self.makeModel()
         #endif
@@ -34,7 +35,11 @@ struct RemoteApp: App {
         network.onAllowed = { [weak model] in model?.retry() }
         self.model = model
         self.network = network
-        services = Services(model: model, isDemo: isDemo)
+        var demoFeedsWidgets = false
+        #if DEBUG
+        demoFeedsWidgets = isDemo && DemoSpeaker.intentsArgument
+        #endif
+        services = Services(model: model, isDemo: isDemo, demoFeedsWidgets: demoFeedsWidgets)
     }
 
     private static func makeModel() -> SpeakerModel {
@@ -60,6 +65,7 @@ struct RemoteApp: App {
                 }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .background { services.widgetSync?.flush() }
             services.lifecycle.phaseChanged(to: phase)
             network.setActive(phase == .active)
         }
@@ -70,13 +76,14 @@ struct RemoteApp: App {
 @MainActor
 final class Services {
     let lifecycle: Lifecycle
-    /// `nil` in the demo, which must not overwrite the real speaker's widget snapshot.
+    /// `nil` in the demo, which must not overwrite the real speaker's widget snapshot,
+    /// unless the demo also feeds the widgets and intents (`-DemoIntents YES`, debug only).
     let widgetSync: WidgetSync?
     let isDemo: Bool
 
-    init(model: SpeakerModel, isDemo: Bool) {
+    init(model: SpeakerModel, isDemo: Bool, demoFeedsWidgets: Bool = false) {
         lifecycle = Lifecycle(model: model)
-        widgetSync = isDemo ? nil : AppGroup.snapshotStore.map { WidgetSync(model: model, store: $0) }
+        widgetSync = isDemo && !demoFeedsWidgets ? nil : AppGroup.snapshotStore.map { WidgetSync(model: model, store: $0) }
         self.isDemo = isDemo
     }
 }
