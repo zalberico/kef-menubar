@@ -21,9 +21,12 @@ It talks to the speaker's own local API, the same one KEF Connect uses. Nothing 
 through KEF's servers. The only third-party code is [Sparkle](https://sparkle-project.org),
 which the Mac app uses to update itself.
 
-<p align="center">
-  <img src="docs/panel.png" width="354" alt="The Speakeasy panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
-</p>
+<table align="center">
+  <tr>
+    <td align="center" valign="top"><img src="docs/panel.png" width="330" alt="The Speakeasy panel in light mode: speaker name Living Room on Wi-Fi / AirPlay with the power button, volume at 24, input tiles with Wi-Fi selected, the now playing card with album art, Corner Booth by The Speakeasy Trio and play controls, subwoofer level, the collapsed Sound section, a firmware update notice, and Settings and Quit"><br><sub>The menu bar panel</sub></td>
+    <td align="center" valign="top"><img src="docs/panel-sound-dark.png" width="330" alt="The panel in dark mode with Sound expanded: treble, bass extension, desk mode with its level, wall mode, balance, phase correction, number of subwoofers, sub model KEF KC62, sub crossover, speaker high-pass, sub polarity and subwoofer output"><br><sub>Sound, in dark mode</sub></td>
+  </tr>
+</table>
 
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
 > Other W2-platform models should work but are untested. Reports and PRs are welcome.
@@ -39,9 +42,9 @@ Control Center controls and Siri. Like the Mac app, it talks straight to the spe
 Wi-Fi network, with no account and nothing in between.
 
 It has been **submitted to the App Store** as *Speakeasy: Hi-Fi Remote*; the link goes here
-once Apple approves it. [Website](https://zalberico.com/kef-menubar/) ·
-[Support](https://zalberico.com/kef-menubar/support/) ·
-[Privacy](https://zalberico.com/kef-menubar/privacy/)
+once Apple approves it. [Website](https://zalberico.com/speakeasy/) ·
+[Support](https://zalberico.com/speakeasy/support/) ·
+[Privacy](https://zalberico.com/speakeasy/privacy/)
 
 <table>
   <tr>
@@ -159,7 +162,7 @@ This section is for the Mac app. For the iPhone app, see
 ### Download
 
 1. Download the latest **Speakeasy-….zip** from
-   [Releases](https://github.com/zalberico/kef-menubar/releases/latest) and unzip it.
+   [Releases](https://github.com/zalberico/speakeasy/releases/latest) and unzip it.
 2. Move **Speakeasy** to your Applications folder and open it. The app is signed and
    notarized by Apple, so macOS only asks you to confirm opening an app downloaded from
    the internet.
@@ -193,9 +196,9 @@ a good idea either way.
 
 ### Mac App Store
 
-Speakeasy for Mac is coming to the Mac App Store as part of the same listing as the iPhone
-app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps it up to
-date. Until it's out, use the download above.
+Speakeasy for Mac has been submitted to the Mac App Store, on the same listing as the
+iPhone app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps
+it up to date. Until it's out, use the download above.
 
 ### Build it yourself
 
@@ -209,8 +212,8 @@ If you'd rather build from source, it takes about a minute.
    ```
 3. Clone and build:
    ```bash
-   git clone https://github.com/zalberico/kef-menubar.git
-   cd kef-menubar
+   git clone https://github.com/zalberico/speakeasy.git
+   cd speakeasy
    scripts/build-app.sh --install
    ```
    This builds **Speakeasy.app**, signs it, copies it to `~/Applications` (over a
@@ -323,8 +326,8 @@ connected to, and you switch between them from the speaker's name at the top of 
 Its widgets, controls and Siri act on the speaker you picked last.
 
 **Is it on the App Store?** The iPhone app has been submitted as *Speakeasy: Hi-Fi
-Remote* and will be there once Apple approves it. The Mac app is coming to the Mac App
-Store under the same listing. In the meantime the Mac releases here are signed with
+Remote* and will be there once Apple approves it. The Mac app has been submitted to the
+Mac App Store under the same listing. In the meantime the Mac releases here are signed with
 Developer ID, notarized by Apple and keep themselves up to date, which is all macOS needs
 to open them without a warning.
 

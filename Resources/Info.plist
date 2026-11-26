@@ -43,7 +43,7 @@
 	     asked: Sparkle hides its "Automatically download and install updates" box and ignores
 	     a SUAutomaticallyUpdate default saved earlier. -->
 	<key>SUFeedURL</key>
-	<string>https://github.com/zalberico/kef-menubar/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/zalberico/speakeasy/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>JMEgDbzVQlIU9k69b924/o2KP90c1e345Ktw9+FBwkA=</string>
 	<key>SUEnableSystemProfiling</key>
