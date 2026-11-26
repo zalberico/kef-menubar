@@ -6,10 +6,12 @@ import KEFAppCore
 import KEFKit
 
 /// Debug only: the `-DemoSpeaker` launch argument shows a made-up speaker ("Living Room",
-/// playing a placeholder track) for screenshots; add `-DemoVolumeLimit 40` to turn its
-/// volume limit on. Its client talks to an in-process fake
-/// through a URLProtocol, discovery finds nothing, and its preferences live in their own
-/// suite, so nothing touches the network, the App Group or the real speaker's settings.
+/// playing a placeholder track, one KC62 sub) for screenshots; add `-DemoVolumeLimit 40`
+/// to turn its volume limit on, and `-DemoSource tv` (any input, or `standby`) to start on
+/// another input; `-DemoKW1 YES` puts the sub on a KW1 wireless kit (no T2 defaults).
+/// Its client talks to an in-process fake through a URLProtocol, discovery finds nothing,
+/// and its preferences live in their own suite, so nothing touches the network, the App
+/// Group or the real speaker's settings.
 enum DemoSpeaker {
     static let argument = "-DemoSpeaker"
     static let host = ["192", "0", "2", "10"].joined(separator: ".")  // TEST-NET-1
@@ -52,13 +54,30 @@ final class DemoSpeakerState: @unchecked Sendable {
         set(KEFPath.deviceName, typed: "string_", #""\#(DemoSpeaker.name)""#)
         set(KEFPath.modelName, typed: "string_", #""SP4041""#)
         set(KEFPath.firmware, typed: "string_", #""3.1.141""#)
-        set(KEFPath.speakerStatus, typed: "kefSpeakerStatus", #""powerOn""#)
-        set(KEFPath.physicalSource, typed: "kefPhysicalSource", #""wifi""#)
+        let source = UserDefaults.standard.string(forKey: "DemoSource").flatMap(Source.init(rawValue:)) ?? .wifi
+        set(KEFPath.speakerStatus, typed: "kefSpeakerStatus", source == .standby ? #""standby""# : #""powerOn""#)
+        set(KEFPath.physicalSource, typed: "kefPhysicalSource", #""\#(source.rawValue)""#)
         set(KEFPath.volume, typed: "i32_", "24")
         set(KEFPath.mute, typed: "bool_", "false")
         let limit = UserDefaults.standard.integer(forKey: "DemoVolumeLimit")
         set(KEFPath.maximumVolume, typed: "i32_", String((1...100).contains(limit) ? limit : 100))
         set(KEFPath.volumeLimit, typed: "bool_", (1...100).contains(limit) ? "true" : "false")
+        set(KEFPath.eqProfileV2, typed: ValueType.eqProfileV2, Self.eqProfile)
+    }
+
+    /// An LSX II profile with one KEF KC62 sub at its defaults, desk mode on: the shape a
+    /// real speaker answers with, including keys the app doesn't show (kept on writes).
+    private static var eqProfile: String {
+        let kw1 = UserDefaults.standard.bool(forKey: "DemoKW1")
+        return """
+        {"profileName":"Living Room","profileId":"00000000-0000-4000-8000-000000000001","soundProfile":"default",\
+        "isExpertMode":false,"isEqMode":false,"isKW1":\(kw1),"wirelessSub":"none","subEnableStereo":false,\
+        "trebleAmount":0,"bassExtension":"standard","deskMode":true,"deskModeSetting":-3,"wallMode":false,\
+        "wallModeSetting":0,"wallMounted":false,"balance":0,"phaseCorrection":true,"dialogueMode":false,\
+        "audioPolarity":"normal","subwooferCount":1,"subwooferPreset":"kc62","subwooferGain":-1,\
+        "subOutLPFreq":55,"highPassMode":true,"highPassModeFreq":67.5,"subwooferPolarity":"normal",\
+        "subwooferOut":true}
+        """
     }
 
     private func set(_ path: String, typed type: String, _ payload: String) {
