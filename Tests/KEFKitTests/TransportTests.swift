@@ -60,8 +60,8 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct TransportTests {
-    static let host = "192.168.1.78"
-    static let https = "https://192.168.1.78:4430"
+    static let host = "192.0.2.78"
+    static let https = "https://192.0.2.78:4430"
 
     func makeClient(_ mode: TransportMode = .auto) -> KEFClient {
         let config = URLSessionConfiguration.ephemeral
@@ -147,11 +147,39 @@ struct TransportTests {
         try await client.setMuted(false)
         let seen = StubProtocol.seen
         #expect(seen.count == 3)
-        #expect(seen[1].url.hasPrefix("http://192.168.1.78/api/getData"))
-        #expect(seen[2].url == "http://192.168.1.78/api/setData")
+        #expect(seen[1].url.hasPrefix("http://192.0.2.78/api/getData"))
+        #expect(seen[2].url == "http://192.0.2.78/api/setData")
         #expect(seen[2].authorization == nil)
         #expect(!seen.contains(where: Self.isAddUser))
         #expect(await client.transport.isSecure == false)
+    }
+
+    /// A task on an invalidated URLSession raises an Objective-C exception (an app crash), so a
+    /// closed transport must refuse before touching its session.
+    @Test func closedTransportFailsInsteadOfCrashing() async throws {
+        StubProtocol.install { _ in (200, #"[{"type":"i32_","i32_":5}]"#) }
+        let client = makeClient(.https)
+        #expect(try await client.volume() == 5)
+        await client.transport.close()
+        await #expect(throws: KEFError.self) { try await client.volume() }
+        let art = try #require(URL(string: Self.https + "/art.jpg"))
+        await #expect(throws: KEFError.self) { _ = try await client.transport.data(from: art) }
+    }
+
+    /// close() racing a request (a reconnect or a command timeout while requests are in
+    /// flight): the request answers or fails, and never creates a task on the invalidated
+    /// session, which crashed the process before the check and the task shared one actor turn.
+    @Test func closeRacingRequestsNeverCrashes() async throws {
+        StubProtocol.install { _ in (200, #"[{"type":"i32_","i32_":5}]"#) }
+        let art = try #require(URL(string: Self.https + "/art.jpg"))
+        for _ in 0..<1000 {
+            let client = makeClient(.http)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { _ = try? await client.volume() }
+                group.addTask { _ = try? await client.transport.data(from: art) }
+                group.addTask { await client.transport.close() }
+            }
+        }
     }
 
     @Test func connectionErrorsInvalidateTheScheme() async throws {

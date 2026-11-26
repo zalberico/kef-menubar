@@ -276,7 +276,7 @@ struct TrustTests {
     }
 
     @Test func ipDetection() {
-        #expect(KEFTrust.isIPAddress("192.168.1.78"))
+        #expect(KEFTrust.isIPAddress("192.0.2.78"))
         #expect(KEFTrust.isIPAddress("[fe80::1%en0]"))
         #expect(!KEFTrust.isIPAddress("lsxii.local"))
     }

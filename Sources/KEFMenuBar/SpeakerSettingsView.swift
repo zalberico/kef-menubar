@@ -1,3 +1,4 @@
+import KEFAppCore
 import KEFKit
 import SwiftUI
 
@@ -49,11 +50,11 @@ struct SpeakerSettingsTab: View {
         }
         .formStyle(.grouped)
         .frame(height: 620)
-        .alert(updateAlertTitle, isPresented: $confirmingUpdate) {
+        .alert(model.firmwareUpdateAlertTitle, isPresented: $confirmingUpdate) {
             Button("Update") { model.installFirmwareUpdate() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The speaker downloads and installs the update, then restarts. Playback stops and the speaker can't be reached for a few minutes. Keep it plugged in until it's back.")
+            Text(SpeakerModel.firmwareUpdateAlertMessage)
         }
         .onAppear {
             newName = model.name
@@ -83,8 +84,8 @@ struct SpeakerSettingsTab: View {
                 TextField("Name", text: $newName, prompt: Text("Speaker name"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit(rename)
-                Button("Rename", action: rename)
+                    .onSubmit { rename() }
+                Button("Rename") { rename() }
                     .disabled(!canRename)
             }
             Text("Also the name shown for AirPlay, Spotify Connect and Bluetooth.")
@@ -100,18 +101,16 @@ struct SpeakerSettingsTab: View {
                 if let mode = settings.standbyMode {
                     Picker("Auto standby", selection: Binding(get: { mode }, set: { model.setStandbyMode($0) })) {
                         // Like KEF Connect: ECO only with the default wake source.
-                        ForEach(StandbyMode.allCases.filter { $0 == mode || $0.isAllowed(wakeRaw: settings.wakeSourceRaw) }) {
+                        ForEach(StandbyMode.options(current: mode, wakeRaw: settings.wakeSourceRaw)) {
                             Text($0.title).tag($0)
                         }
                     }
                 }
                 if let wake = settings.wakeSource {
                     Picker("Wake from standby on", selection: Binding(get: { wake }, set: { model.setWakeSource($0) })) {
-                        ForEach(WakeSource.options(for: model.inputs) + (WakeSource.options(for: model.inputs).contains(wake) ? [] : [wake])) { Text($0.title).tag($0) }
+                        ForEach(WakeSource.options(for: model.inputs, current: wake)) { Text($0.title).tag($0) }
                     }
-                    Text(settings.standbyMode == .eco
-                         ? "Wi-Fi and AirPlay always wake the speaker. ECO standby needs the default wake source, so choosing another input switches auto standby to 30 minutes."
-                         : "Wi-Fi and AirPlay always wake the speaker. ECO standby is only available with the default wake source.")
+                    Text(WakeSource.caption(standbyMode: settings.standbyMode))
                         .font(.caption).foregroundStyle(.secondary)
                 } else if let raw = settings.wakeSourceRaw {
                     LabeledContent("Wake from standby on") { Text(raw).foregroundStyle(.secondary) }
@@ -201,12 +200,12 @@ struct SpeakerSettingsTab: View {
     private var firmwareSection: some View {
         Section("Firmware") {
             LabeledContent("Installed") {
-                Text(model.firmware.map(shortFirmwareVersion) ?? "—").foregroundStyle(.secondary)
+                Text(model.firmware.map { shortFirmwareVersion($0) } ?? "—").foregroundStyle(.secondary)
             }
             LabeledContent("Status") {
-                Text(firmwareStatusText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                Text(model.firmwareStatusText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
             }
-            if let progress = firmwareProgress {
+            if let progress = model.firmwareProgress {
                 ProgressView(value: Double(min(max(progress, 0), 100)), total: 100)
             }
             HStack {
@@ -228,54 +227,14 @@ struct SpeakerSettingsTab: View {
 
     // MARK: Helpers
 
-    private var canRename: Bool {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.isOnline && !trimmed.isEmpty && trimmed != model.name && trimmed.count <= 64
-    }
+    private var canRename: Bool { model.canRename(newName) }
 
     private func rename() {
         guard canRename else { return }
         pendingName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         model.rename(newName)
     }
-
-    private var updateAlertTitle: String {
-        let version = model.firmwareStatus?.availableVersion.map(shortFirmwareVersion)
-        return "Update \(model.name)\(version.map { " to \($0)" } ?? "")?"
-    }
-
-    private var firmwareStatusText: String {
-        let version = model.firmwareStatus?.availableVersion.map(shortFirmwareVersion)
-        let versionSuffix = version.map { " \($0)" } ?? ""
-        if !model.isOnline {
-            return model.firmwareActivity == .updating ? "Restarting after the update…" : "Speaker offline"
-        }
-        if model.firmwareActivity == .updating || model.firmwareInstalling {
-            if model.firmwareStatus?.state == .downloading { return "Downloading\(versionSuffix)…" }
-            if model.firmwareInstalling { return "Installing… the speaker restarts when done" }
-            return "Starting the update…"
-        }
-        if model.firmwareActivity == .checking { return "Checking…" }
-        guard let status = model.firmwareStatus else { return "Not reported by this speaker" }
-        switch status.state {
-        case .idle:
-            guard let checked = model.firmwareCheckedAt else { return "Up to date" }
-            return "Up to date · checked \(checked.formatted(date: .omitted, time: .shortened))"
-        case .checking: return "Checking…"
-        case .available: return "Update available\(versionSuffix)"
-        case .downloading: return "Downloading\(versionSuffix)…"
-        case .downloaded: return "Update downloaded\(versionSuffix)"
-        case .other(let raw): return raw
-        }
-    }
-
-    /// Download or install progress, when the speaker reports one.
-    private var firmwareProgress: Int? {
-        guard model.isOnline else { return nil }
-        if model.firmwareStatus?.state == .downloading { return model.firmwareStatus?.downloadProgress }
-        if let install = model.firmwareInstall, install.isInstalling { return install.overallProgress }
-        return nil
-    }}
+}
 
 /// A 0–100 volume setting that writes when the slider is released, not on every step.
 private struct VolumeSettingRow: View {

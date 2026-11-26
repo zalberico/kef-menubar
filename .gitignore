@@ -3,3 +3,6 @@ build/
 .swiftpm/
 *.xcodeproj/xcuserdata/
 .DS_Store
+**/xcuserdata/
+*.xcuserstate
+iOS/Config/Local.xcconfig

@@ -47,7 +47,7 @@ public enum Signer {
     /// The `Authorization` header value for a request.
     ///
     /// - Parameters:
-    ///   - url: full URL exactly as sent, e.g. `https://192.168.1.20:4430/api/setData`.
+    ///   - url: full URL exactly as sent, e.g. `https://192.0.2.20:4430/api/setData`.
     ///   - body: exact request body bytes (`nil` for GET).
     ///   - nonce, timestampMs: only for deterministic tests.
     public static func authorization(
