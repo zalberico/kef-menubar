@@ -31,7 +31,8 @@ code is [Sparkle](https://sparkle-project.org), which the Mac app uses to update
 
 <p align="center">
   <a href="https://github.com/zalberico/speakeasy/releases/latest/download/Speakeasy.zip"><b>⬇ Download Speakeasy for Mac</b></a><br>
-  <sub>Free · macOS 14 or later on Apple silicon · <a href="#download">How to install</a></sub>
+  <sub>Free · macOS 14 or later on Apple silicon · <a href="#download">How to install</a></sub><br>
+  <sub>Also coming to the <a href="#mac-app-store">Mac App Store</a> once Apple approves it.</sub>
 </p>
 
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
@@ -166,6 +167,10 @@ This section is for the Mac app. For the iPhone app, see
 [iPhone app › Install](#iphone-app-speakeasy).
 
 ### Download
+
+You can download Speakeasy here now, or wait for the [Mac App Store](#mac-app-store)
+version, which is in review: once Apple approves it, you can install it from there instead
+and the App Store keeps it up to date. Both are free and work the same way.
 
 1. **[Download Speakeasy for Mac](https://github.com/zalberico/speakeasy/releases/latest/download/Speakeasy.zip)**, a zip of about 3 MB. Safari unzips it for
    you; with other browsers, double-click the zip in your Downloads folder.
