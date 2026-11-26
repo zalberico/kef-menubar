@@ -122,6 +122,11 @@ struct ArtworkView: View {
             .onChange(of: artwork.map(ObjectIdentifier.init), initial: true) {
                 if let artwork { held = artwork }
             }
+            .onChange(of: expectsArtwork) { _, expects in
+                // The speaker graphic took over: the last cover bridges consecutive tracks
+                // only, and doesn't come back after it.
+                if !expects { held = nil }
+            }
             .task(id: artwork == nil && expectsArtwork) {
                 // Waiting for artwork: give up on the last one after a moment (a failed load).
                 guard artwork == nil, expectsArtwork, held != nil else { return }

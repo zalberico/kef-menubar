@@ -27,7 +27,10 @@ struct PanelStack: View {
                 .modifier(PanelColumnChrome(isSheet: isSheet))
                 #if DEBUG || PROBE
                 .navigationDestination(for: UIState.Route.self) { route in
+                    // The pushed view's toolbar replaces the root's in the bar, so it
+                    // carries the chrome too (or the vertical bar would show only Back).
                     RouteView(route: route)
+                        .modifier(PanelColumnChrome(isSheet: isSheet))
                 }
                 #endif
         }

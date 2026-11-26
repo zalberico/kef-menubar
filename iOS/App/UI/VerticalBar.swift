@@ -1,5 +1,6 @@
 import KEFAppCore
 import SwiftUI
+import UIKit
 
 /// Which column's toolbar puts the remote's chrome (mute, power, Sound, Settings, Speakers)
 /// in the system's vertical bar (iOS 27.1). The bar shows the items of the navigation bar
@@ -116,29 +117,47 @@ private struct RemoteChromeItems: ToolbarContent {
         // an item already in the bar isn't redrawn, so each look is an item of its own.
         let hasBadge = panel == .settings && firmwareUpdateAvailable
         if isSelected, hasBadge {
-            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: true)) }
+            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: true, isSelected: true)) }
         } else if isSelected {
-            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: false)) }
+            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: false, isSelected: true)) }
         } else if hasBadge {
-            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: true) }
+            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: true, isSelected: false) }
         } else {
-            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: false) }
+            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: false, isSelected: false) }
         }
     }
 
-    private func panelButton(_ panel: UIState.Panel, hasBadge: Bool) -> some View {
+    private func panelButton(_ panel: UIState.Panel, hasBadge: Bool, isSelected: Bool) -> some View {
         Button {
             open(panel)
         } label: {
-            Label(panel.title, systemImage: panel.symbol)
+            Label {
+                Text(panel.title)
+            } icon: {
+                if isSelected, let symbol = Self.prominentSymbol(panel.symbol) {
+                    Image(uiImage: symbol)
+                } else {
+                    Image(systemName: panel.symbol)
+                }
+            }
         }
         .badge(hasBadge ? 1 : 0)
         .accessibilityValue(hasBadge ? "Firmware update available" : "")
     }
 
+    /// The symbol in the readable label colour for the amber fill (near-black in dark mode).
+    /// The bar draws its items' symbols in its own colour, ignoring the foreground style,
+    /// so the colour is baked into the image; the dynamic colour still follows the
+    /// appearance and Increase Contrast.
+    private static func prominentSymbol(_ name: String) -> UIImage? {
+        UIImage(systemName: name)?
+            .withTintColor(UIColor(resource: .prominentLabel), renderingMode: .alwaysOriginal)
+    }
+
     private func selected(_ button: some View) -> some View {
+        // As for every other selected control (the symbol carries the label colour itself).
         button
-            .buttonStyle(.glassProminent)
+            .prominentGlassStyle()
             .accessibilityAddTraits(.isSelected)
     }
 }

@@ -56,16 +56,16 @@ private struct PanelButton: View {
             Label(title, systemImage: symbol)
                 .labelStyle(iconOnly ? AnyLabelStyle.iconOnly : .titleAndIcon)
                 .font(.body.weight(.semibold))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, minHeight: 30)
-            .overlay(alignment: .topTrailing) {
-                if showsBadge {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 9, height: 9)
-                        .offset(x: -6, y: -2)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .overlay(alignment: .topTrailing) {
+                    if showsBadge {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 9, height: 9)
+                            .offset(x: -6, y: -2)
+                    }
                 }
-            }
         }
         .controlSize(.large)
         .accessibilityLabel(title)
