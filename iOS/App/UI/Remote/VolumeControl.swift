@@ -197,8 +197,9 @@ private struct VolumeSlider: View {
     }
 }
 
-/// A mark on the slider's track at the speaker's volume limit (the thumb passes over it).
-private struct LimitTick: View {
+/// A mark on a 0…100 slider's track at the speaker's volume limit (the thumb passes over
+/// it). Shared with the startup volume sliders in Settings.
+struct LimitTick: View {
     let fraction: Double
 
     /// The system thumb's width: its centre travels this much less than the track.

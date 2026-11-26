@@ -29,11 +29,12 @@ struct SettingsPanel: View {
             SpeakerSettingsCards()
             FirmwareCard()
 
-            Text("These settings are stored on the speaker. Firmware updates only start after you confirm. This app never resets, reboots or reconfigures the speaker's network.")
+            // About every card above, so set apart from the Firmware card's own footer.
+            Text("These settings are stored on the speaker. This app never resets, reboots or reconfigures the speaker's network.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
-                .padding(.top, 12)
+                .padding(.top, 28)
 
             AppPreferencesCard()
             AboutCard()
@@ -57,10 +58,15 @@ struct SettingsPanel: View {
         }
         .onAppear {
             model.loadSpeakerSettings()
-            reconcileRename()
+            reconcileRename(feedback: false)
         }
         .onChange(of: model.isOnline) { _, online in
             if online { model.loadSpeakerSettings() }
+        }
+        .onChange(of: model.firmwareUpdateAvailable) { _, available in
+            // An alert the update's going took away (offline, a check, another speaker)
+            // never comes back by itself.
+            if !available { ui.confirmingFirmwareUpdate = false }
         }
         .onChange(of: model.name) { reconcileRename() }
         .onChange(of: model.preferences.lastSpeakerName) { reconcileRename() }
@@ -69,8 +75,9 @@ struct SettingsPanel: View {
         .animation(.snappy(duration: 0.25), value: model.firmwareProgress)
     }
 
-    private func reconcileRename() {
-        ui.reconcileRename(modelName: model.name, savedName: model.preferences.lastSpeakerName)
+    private func reconcileRename(feedback: Bool = true) {
+        ui.reconcileRename(modelName: model.name, savedName: model.preferences.lastSpeakerName,
+                           feedback: feedback)
     }
 }
 
@@ -120,7 +127,7 @@ private struct SpeakerSettingsCards: View {
 private struct NameCard: View {
     @Environment(SpeakerModel.self) private var model
     @Environment(UIState.self) private var ui
-    @State private var renames = 0
+    @FocusState private var editing: Bool
 
     /// The speaker's limit (KEFKit refuses longer names too).
     private static let maxLength = 64
@@ -128,21 +135,38 @@ private struct NameCard: View {
     var body: some View {
         let text = ui.renameDraft ?? model.name
         let pending = ui.pendingRename != nil
-        let tooLong = text.trimmingCharacters(in: .whitespacesAndNewlines).count > Self.maxLength
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let edited = trimmed != model.name
+        let tooLong = trimmed.count > Self.maxLength
         CardSection(header: "Name", footer: "Also the name shown for AirPlay, Spotify Connect and Bluetooth.") {
             VStack(alignment: .leading, spacing: 6) {
                 AdaptiveRow {
-                    TextField("Speaker name", text: Binding(get: { text }, set: { ui.renameDraft = $0 }))
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit { rename(text) }
-                        .disabled(pending)
+                    HStack(spacing: 8) {
+                        TextField("Speaker name", text: Binding(get: { text }, set: { ui.renameDraft = $0 }))
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .focused($editing)
+                            .onSubmit { rename(text) }
+                            .disabled(pending)
+                        if !pending && !edited {
+                            // Says the name can be edited; the field itself is what VoiceOver reads.
+                            Button {
+                                editing = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHidden(true)
+                        }
+                    }
                 } trailing: {
+                    // Only once there is something to send, so it never reads as a hint.
                     if pending {
                         ProgressView()
                             .accessibilityLabel("Renaming")
-                    } else {
+                    } else if edited {
                         Button("Rename") {
                             rename(text)
                         }
@@ -156,7 +180,9 @@ private struct NameCard: View {
                 }
             }
         }
-        .sensoryFeedback(.success, trigger: renames)
+        // When the speaker answers, not when the name is sent.
+        .sensoryFeedback(.success, trigger: ui.renamesConfirmed)
+        .sensoryFeedback(.error, trigger: ui.renamesRefused)
     }
 
     private func rename(_ text: String) {
@@ -164,7 +190,6 @@ private struct NameCard: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         ui.pendingRename = trimmed
         ui.renameDraft = trimmed
-        renames += 1
         model.rename(trimmed)
     }
 }
@@ -247,13 +272,13 @@ private struct StartupVolumeCard: View {
                                              spokenTitle: "\(source.displayName) startup volume",
                                              draftKey: source.rawValue,
                                              value: settings.startupVolumes[source] ?? 0,
-                                             ceiling: ceiling) { level in
+                                             ceiling: ceiling, limited: limited) { level in
                                 model.setStartupVolume(level, for: source)
                             }
                         }
                     } else if let level = settings.startupVolume {
                         VolumeSettingRow(title: "Volume", spokenTitle: "Startup volume", draftKey: "all",
-                                         value: level, ceiling: ceiling) { level in
+                                         value: level, ceiling: ceiling, limited: limited) { level in
                             model.setStartupVolume(level)
                         }
                     }
@@ -263,8 +288,10 @@ private struct StartupVolumeCard: View {
     }
 }
 
-/// A 0–100 volume setting that writes when the slider is released, not on every step. The
-/// slider stops at the volume limit; a level stored above it is marked.
+/// A 0–100 volume setting that writes when the slider is released, not on every step. Like
+/// the main volume slider, the track is always 0–100 with a tick at the limit and the part
+/// above it disabled, so a level sits where it does there; a level stored above the limit
+/// shows past the tick and is marked.
 private struct VolumeSettingRow: View {
     let title: String
     let spokenTitle: String
@@ -273,13 +300,14 @@ private struct VolumeSettingRow: View {
     let value: Int
     /// The volume limit (100 without one).
     let ceiling: Int
+    let limited: Bool
     let commit: (Int) -> Void
 
     @Environment(UIState.self) private var ui
 
     var body: some View {
         let draft = ui.startupVolumeDrafts[draftKey]
-        let shown = draft ?? Double(min(value, ceiling))
+        let shown = draft ?? Double(min(max(value, 0), 100))
         let aboveLimit = value > ceiling && draft == nil
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
@@ -299,13 +327,17 @@ private struct VolumeSettingRow: View {
             .accessibilityHidden(true)  // the slider says both
 
             Slider(value: Binding(get: { shown }, set: { ui.startupVolumeDrafts[draftKey] = $0.rounded() }),
-                   in: 0...Double(max(ceiling, 1)),
+                   in: 0...100,
+                   enabledBounds: limited ? 0...Double(max(ceiling, 1)) : nil,
                    label: { Text(spokenTitle) },
                    onEditingChanged: { editing in
                        guard !editing, let draft = ui.startupVolumeDrafts[draftKey] else { return }
                        ui.startupVolumeDrafts[draftKey] = nil
                        if Int(draft) != value { commit(Int(draft)) }
                    })
+                .background {
+                    if limited { LimitTick(fraction: Double(ceiling) / 100) }
+                }
                 .accessibilityValue(aboveLimit ? "\(value), above the volume limit of \(ceiling)" : "\(Int(shown))")
                 .accessibilityAdjustableAction { direction in
                     let current = min(value, ceiling)
@@ -425,7 +457,7 @@ private struct FirmwareCard: View {
     var body: some View {
         let checking = model.firmwareActivity == .checking
         CardSection(header: "Firmware",
-                    footer: "The speaker also checks for updates by itself every few hours and can install them while idle.") {
+                    footer: "This app only starts an update after you confirm. The speaker also checks for updates by itself every few hours and can install them while idle.") {
             LabeledRow("Installed") {
                 Text(model.firmware.map { shortFirmwareVersion($0) } ?? "—")
                     .foregroundStyle(.secondary)
