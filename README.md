@@ -38,15 +38,20 @@ playing on one screen, the speaker's EQ and settings a tap away, plus Home Scree
 Control Center controls and Siri. Like the Mac app, it talks straight to the speaker on your
 Wi-Fi network, with no account and nothing in between.
 
+It has been **submitted to the App Store** as *Speakeasy: Hi-Fi Remote*; the link goes here
+once Apple approves it. [Website](https://zalberico.com/kef-menubar/) ·
+[Support](https://zalberico.com/kef-menubar/support/) ·
+[Privacy](https://zalberico.com/kef-menubar/privacy/)
+
 <table>
   <tr>
     <td align="center" width="25%"><img src="docs/screenshots/01-remote.png" width="180" alt="Speakeasy's remote: speaker name and input at the top, album art, track title and artist, play controls, the volume card at 24, the input tiles with Wi-Fi selected, and Sound and Settings buttons"><br><sub>Remote</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/02-no-artwork-dark.png" width="180" alt="The remote in dark mode on the TV input: the speaker cabinet on a teal tile in place of album art, with Playing from TV"><br><sub>TV input, dark mode</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/03-sound.png" width="180" alt="The Sound panel's subwoofer section: number of subs, sub level, sub model KEF KC62, sub crossover, speaker high-pass, sub polarity and subwoofer output"><br><sub>Sound</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/04-settings.png" width="180" alt="The Settings panel: standby light, startup sound, the remote's options, and Firmware with the installed version, an available update, Check Now and Update"><br><sub>Settings</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/04-settings.png" width="180" alt="The Settings panel: standby light, startup sound, the remote's options, and Firmware with the installed version, up to date, and Check Now"><br><sub>Settings</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="docs/screenshots/06-duo-open.png" width="380" alt="iPhone Duo open: the remote on the left, the Sound panel on the right, and a vertical bar of controls along the right edge"><br><sub>iPhone Duo, open: remote and Sound side by side</sub></td>
+    <td colspan="2" align="center"><img src="docs/screenshots/06-duo-open.png" width="380" alt="iPhone Duo open: the remote on the left, the Sound panel on the right, and a vertical bar of controls (mute, power, Sound, Settings, speakers) along the right edge"><br><sub>iPhone Duo, open: remote and Sound side by side</sub></td>
     <td colspan="2" align="center"><img src="docs/screenshots/07-duo-closed.png" width="184" alt="iPhone Duo closed: the compact remote with the vertical bar holding mute, power, Sound, Settings and speakers"><br><sub>iPhone Duo, closed</sub></td>
   </tr>
   <tr>
@@ -65,8 +70,8 @@ Wi-Fi network, with no account and nothing in between.
   balance, phase correction, and the subwoofer section with KEF's sub presets
 - **Settings:** the speaker's name, standby and wake, startup volume, volume limit, lights,
   the remote, and firmware (check, and install after you confirm)
-- **Widgets and controls:** a small and a medium Home Screen widget with volume buttons,
-  Lock Screen widgets, and three controls (power, mute, input) for Control Center, the
+- **Widgets and controls:** a small and a medium Home Screen widget (the medium one has
+  volume buttons), Lock Screen widgets, and three controls (power, mute, input) for Control Center, the
   Lock Screen or the Action button
 - **Siri and Shortcuts:** "Turn up Speakeasy", "Mute Speakeasy", "Switch Speakeasy to TV",
   "Turn on Speakeasy", plus actions for set volume, standby, play/pause and next/previous
@@ -78,8 +83,9 @@ Wi-Fi network, with no account and nothing in between.
 
 **Install**
 
-TestFlight is private for now, so to use it you build it yourself. It needs **Xcode 27.1
-or later**, and runs on **iOS 26 or later**.
+Speakeasy is waiting for App Store review; once it's approved, install it from the App Store.
+Until then, or if you'd rather, you can build it yourself. It needs **Xcode 27.1 or later**,
+and runs on **iOS 26 or later**.
 
 1. Open `iOS/Remote.xcodeproj` in Xcode.
 2. Create `iOS/Config/Local.xcconfig` (it's gitignored) with your own team and
@@ -302,11 +308,11 @@ even if its IP address changes. The iPhone app keeps a list of the speakers it h
 connected to, and you switch between them from the speaker's name at the top of the remote.
 Its widgets, controls and Siri act on the speaker you picked last.
 
-**Why not the App Store?** For the Mac it hasn't been needed. The releases here are signed
-with Developer ID and notarized by Apple, which is all macOS needs to open them without a
-warning. An iPhone app can only come from the App Store, TestFlight or your own Xcode.
-Speakeasy is in a private TestFlight for now and may come to the App Store later; until
-then, [build it yourself](#iphone-app-speakeasy).
+**Is it on the App Store?** The iPhone app has been submitted as *Speakeasy: Hi-Fi
+Remote* and will be there once Apple approves it. A Mac App Store version of the menu bar
+app is in the works. In the meantime the Mac releases here are signed with Developer ID,
+notarized by Apple and keep themselves up to date, which is all macOS needs to open them
+without a warning.
 
 ## How it works
 
