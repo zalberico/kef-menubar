@@ -15,30 +15,68 @@ import KEFKit
 /// Its client talks to an in-process fake through a URLProtocol, discovery finds nothing,
 /// and its preferences live in their own suite, so nothing touches the network, the App
 /// Group or the real speaker's settings.
+///
+/// `-DemoIntents YES` (with `-DemoSpeaker`) also points the intents, controls and widgets
+/// at a demo speaker until the app is next launched without it: the app sets a flag in the
+/// App Group, and each process then serves its own fake whose state is kept in the App
+/// Group (`demo-speaker.json`), so a change made from Control Center is still there for the
+/// widget. They write the widgets' snapshot, which the real app rewrites once it runs again.
 enum DemoSpeaker {
     static let argument = "-DemoSpeaker"
     static let host = ["192", "0", "2", "10"].joined(separator: ".")  // TEST-NET-1
     static let name = "Living Room"
+    static let modelCode = "SP4041"
 
     static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains(argument) }
 
-    @MainActor static func makeModel() -> SpeakerModel {
-        let suite = "\(AppLog.subsystem).demo"
-        let defaults = UserDefaults(suiteName: suite) ?? .standard
-        defaults.removePersistentDomain(forName: suite)
-        let preferences = Preferences(defaults: defaults)
-        preferences.lastHost = host
-        preferences.lastSpeakerName = name
-        preferences.lastSource = Source.wifi.rawValue
-        return SpeakerModel(
-            preferences: preferences,
-            logSubsystem: AppLog.subsystem,
-            makeClient: { host in
-                let configuration = URLSessionConfiguration.ephemeral
-                configuration.protocolClasses = [DemoSpeakerProtocol.self]
-                return KEFClient(transport: KEFTransport(host: host, mode: .http, configuration: configuration))
-            },
-            discover: { [] })
+    /// A client for the in-process fake (and only it).
+    static func makeClient(host: String = host) -> KEFClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DemoSpeakerProtocol.self]
+        return KEFClient(transport: KEFTransport(host: host, mode: .http, configuration: configuration))
+    }
+
+    // MARK: Intents, controls and widgets
+
+    private static let intentsFlag = "DebugDemoIntents"
+
+    /// The app was launched with `-DemoSpeaker -DemoIntents YES` last time.
+    static var intentsUseDemo: Bool { AppGroup.defaults().bool(forKey: intentsFlag) }
+
+    /// Called by the app at launch: turns the demo on for the extension, or off.
+    static func setIntentsUseDemo(_ enabled: Bool) {
+        if enabled {
+            AppGroup.defaults().set(true, forKey: intentsFlag)
+            // The extension starts from the app's demo (its launch arguments: volume limit,
+            // input), not from a stale run.
+            saveIntentState()
+        } else {
+            AppGroup.defaults().removeObject(forKey: intentsFlag)
+            if let url = stateURL { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    /// The configuration the intents use for the demo speaker.
+    static var intentConfig: SharedSpeakerConfig {
+        SharedSpeakerConfig(hostMode: .manual, manualHost: host, lastSpeakerName: name,
+                            lastSource: Source.wifi.rawValue, lastModelCode: modelCode)
+    }
+
+    private static var stateURL: URL? {
+        AppGroup.containerURL?.appendingPathComponent("demo-speaker.json")
+    }
+
+    /// Load the state the last intent left, before using the fake.
+    static func loadIntentState() {
+        guard let url = stateURL, let data = try? Data(contentsOf: url),
+              let saved = try? JSONDecoder().decode(DemoSpeakerState.Saved.self, from: data) else { return }
+        DemoSpeakerState.shared.restore(saved)
+    }
+
+    /// Keep the fake's state for the next intent, control or widget.
+    static func saveIntentState() {
+        guard let url = stateURL, let data = try? JSONEncoder().encode(DemoSpeakerState.shared.saved) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 }
 
@@ -114,6 +152,21 @@ final class DemoSpeakerState: @unchecked Sendable {
 
     private func set(_ path: String, typed type: String, _ payload: String) {
         values[path] = #"{"type":"\#(type)","\#(type)":\#(payload)}"#
+    }
+
+    /// What intents keep between runs: the values and whether it is playing.
+    struct Saved: Codable {
+        var values: [String: String]
+        var playing: Bool
+    }
+
+    var saved: Saved { lock.withLock { Saved(values: values, playing: playing) } }
+
+    func restore(_ saved: Saved) {
+        lock.withLock {
+            values = saved.values
+            playing = saved.playing
+        }
     }
 
     private var playerData: String {
