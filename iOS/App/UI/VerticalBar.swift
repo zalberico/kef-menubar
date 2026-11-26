@@ -98,11 +98,10 @@ private struct RemoteChromeItems: ToolbarContent {
         if showsRemoteControls {
             ToolbarItem(placement: .primaryAction) { MuteBarButton() }
                 .visibilityPriority(.high)
-            // One power control at a time, as in the top bar: only while the speaker is on.
-            if isOn {
-                ToolbarItem(placement: .primaryAction) { PowerButton() }
-                    .visibilityPriority(.high)
-            }
+            // Power always lives in the bar (on and in standby), so it never moves; the hero
+            // drops its Turn On button while a vertical bar is shown.
+            ToolbarItem(placement: .primaryAction) { BarPowerButton() }
+                .visibilityPriority(.high)
             panelItem(.sound)
             panelItem(.settings)
         }
@@ -181,21 +180,66 @@ extension UIState.Panel {
     }
 }
 
-/// Mute in the vertical bar, tinted while muted (the volume card keeps its own).
+/// Symbols with their colour baked in: the vertical bar draws items in its own colour and
+/// shows no disabled dimming, so a state colour has to be part of the image.
+private enum BarSymbol {
+    static func image(_ name: String, _ color: UIColor) -> Image {
+        if let symbol = UIImage(systemName: name)?.withTintColor(color, renderingMode: .alwaysOriginal) {
+            return Image(uiImage: symbol)
+        }
+        return Image(systemName: name)
+    }
+
+    static var accent: UIColor { UIColor(named: "AccentColor") ?? .tintColor }
+}
+
+/// Mute in the vertical bar: saffron while muted, faint while it can't be used (the speaker
+/// is off or an input is settling).
 private struct MuteBarButton: View {
     @Environment(SpeakerModel.self) private var model
 
     var body: some View {
         let muted = model.muted
+        let usable = model.isOn && !model.inputSettling
+        let name = muted ? "speaker.slash.fill" : "speaker.wave.2.fill"
         Button {
             model.toggleMute()
         } label: {
-            MuteSymbol(muted: muted)
-                .foregroundStyle(muted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            if !usable {
+                BarSymbol.image(name, .tertiaryLabel)
+            } else if muted {
+                BarSymbol.image(name, BarSymbol.accent)
+            } else {
+                MuteSymbol(muted: false)
+            }
         }
-        .disabled(!model.isOn || model.inputSettling)
+        .disabled(!usable)
         // A toggle: VoiceOver reads "Mute, switch button, on" while muted.
         .accessibilityLabel("Mute")
         .accessibilityAddTraits(muted ? [.isToggle, .isSelected] : .isToggle)
+    }
+}
+
+/// Power in the vertical bar, in both states: saffron while on, the bar's own colour in
+/// standby (still clearly tappable), faint while the speaker can't be reached.
+private struct BarPowerButton: View {
+    @Environment(SpeakerModel.self) private var model
+
+    var body: some View {
+        let isOn = model.isOn
+        Button {
+            model.togglePower()
+        } label: {
+            if !model.isOnline {
+                BarSymbol.image("power", .tertiaryLabel)
+            } else if isOn {
+                BarSymbol.image("power", BarSymbol.accent)
+            } else {
+                Image(systemName: "power")
+            }
+        }
+        .disabled(!model.isOnline)
+        .accessibilityLabel(isOn ? "Put speaker in standby" : "Turn speaker on")
+        .accessibilityHint(isOn ? "" : "Turns on with \(model.lastSource.displayName)")
     }
 }

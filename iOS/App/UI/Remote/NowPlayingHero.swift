@@ -58,15 +58,20 @@ struct NowPlayingHero: View {
             TransportControls(canPrevious: model.player.canPrevious, canPause: model.player.canPause,
                               isPlaying: model.player.isPlaying, canNext: model.player.canNext)
         } else if model.isOnline, !model.isOn {
-            Button {
-                model.togglePower()
-            } label: {
-                Label("Turn On", systemImage: "power")
-                    .fontWeight(.semibold)
+            // With a vertical bar (iPhone Duo) power always lives in the bar instead.
+            VerticalBarEdgeReader { edge in
+                if edge == nil {
+                    Button {
+                        model.togglePower()
+                    } label: {
+                        Label("Turn On", systemImage: "power")
+                            .fontWeight(.semibold)
+                    }
+                    .accessibilityHint("Turns on with \(model.lastSource.displayName)")
+                    .prominentGlassStyle()
+                    .controlSize(.large)
+                }
             }
-            .accessibilityHint("Turns on with \(model.lastSource.displayName)")
-            .prominentGlassStyle()
-            .controlSize(.large)
         }
     }
 
