@@ -170,8 +170,8 @@ This section is for the Mac app. For the iPhone app, see
 1. **[Download Speakeasy for Mac](https://github.com/zalberico/speakeasy/releases/latest/download/Speakeasy.zip)**, a zip of about 3 MB. Safari unzips it for
    you; with other browsers, double-click the zip in your Downloads folder.
 2. Drag **Speakeasy** into your **Applications** folder, then open it from there. The app
-   is signed and notarized by Apple, so macOS only asks you to confirm opening an app
-   downloaded from the internet.
+   is signed with Developer ID and notarized by Apple, so macOS only asks you to confirm
+   opening an app downloaded from the internet.
 3. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
    the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
    Privacy & Security › Local Network.
