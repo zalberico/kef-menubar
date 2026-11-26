@@ -34,7 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var model = Self.makeModel()
     private var preferences: Preferences { model.preferences }
     #if !APPSTORE
-    /// Sparkle starts with the app, so scheduled checks (once allowed) run from launch.
+    /// Sparkle starts at launch (once the copy isn't moving itself), so scheduled checks (once
+    /// allowed) run from then.
     /// The Mac App Store build (APPSTORE) has no Sparkle: the App Store updates it.
     let updater = AppUpdater()
     #endif
@@ -43,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         // A copy just downloaded and opened from Downloads offers to move itself first.
         if MoveToApplications.offerIfNeeded() { return }
+        updater.start()
         #endif
         model.start()
         HotKeyCenter.shared.install()

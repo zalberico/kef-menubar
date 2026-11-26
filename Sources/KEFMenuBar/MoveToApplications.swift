@@ -9,16 +9,18 @@ import os
 /// behind. macOS also runs a downloaded app that wasn't moved from a hidden, read-only copy
 /// (App Translocation), where Sparkle can't replace it, so it would never update. So on launch,
 /// a copy that came from the internet (it carries the quarantine attribute, or macOS
-/// translocated it) and isn't in an Applications folder asks once whether to move. Copies
-/// built locally, or already moved, never ask.
+/// translocated it) and isn't in an Applications folder asks whether to move. Copies built
+/// locally, or already moved, never ask.
 ///
-/// Moving copies the app to /Applications (or ~/Applications when /Applications isn't
-/// writable), clears the quarantine attribute on the copy, as Finder's own move would let it
-/// run in place, moves the downloaded copy to the Trash, and relaunches from the new place.
+/// Moving replaces an existing install of this app in place (an older one may still be named
+/// "KEF Menu Bar.app"), or else copies the app to /Applications (~/Applications when
+/// /Applications isn't writable). It clears the quarantine attribute on the copy, as Finder's
+/// own move would let it run in place, moves the downloaded copy to the Trash, and relaunches
+/// from the new place.
 ///
 /// Debug builds only, for testing without clicking: `-MoveToApplicationsAnswer move` (or
-/// `stay`) asks and answers the question whether or not the copy is quarantined, and `-MoveToApplicationsFolder <path>` moves there instead
-/// of an Applications folder.
+/// `stay`) asks and answers the question whether or not the copy is quarantined, and
+/// `-MoveToApplicationsFolder <path>` moves there instead of an Applications folder.
 @MainActor
 enum MoveToApplications {
     private static let log = Logger(subsystem: "KEFMenuBar", category: "move")
@@ -56,18 +58,27 @@ enum MoveToApplications {
             return false
         }
 
+        let destination: URL
         do {
-            let destination = try move(running: running, original: original)
-            relaunch(at: destination)
-            return true
+            destination = try move(running: running, original: original)
         } catch {
             log.error("Move failed: \(error.localizedDescription, privacy: .public)")
-            let failure = NSAlert(error: error)
+            let failure = NSAlert()
+            failure.alertStyle = .warning
             failure.messageText = "Speakeasy couldn't move itself to Applications"
             failure.informativeText = "\(error.localizedDescription)\n\nYou can drag Speakeasy into your Applications folder in Finder instead."
             failure.runModal()
             return false
         }
+        guard relaunch(at: destination) else {
+            let note = NSAlert()
+            note.messageText = "Speakeasy is now in Applications"
+            note.informativeText = "Quit this copy and open Speakeasy from \(destination.deletingLastPathComponent().path)."
+            note.runModal()
+            return false
+        }
+        NSApp.terminate(nil)
+        return true
     }
 
     /// The question, and whether "Don't ask again" was ticked.
@@ -75,7 +86,7 @@ enum MoveToApplications {
         NSApp.activate()
         let alert = NSAlert()
         alert.messageText = "Move Speakeasy to your Applications folder?"
-        alert.informativeText = "Speakeasy is running from where it was downloaded. Moved to Applications, it stays put and can keep itself up to date."
+        alert.informativeText = "Speakeasy can only keep itself up to date from Applications. It will move there and reopen, and the downloaded copy goes to the Trash."
         alert.addButton(withTitle: "Move to Applications")
         alert.addButton(withTitle: "Don't Move")
         alert.showsSuppressionButton = true
@@ -93,29 +104,40 @@ enum MoveToApplications {
     /// Copies the app into Applications and trashes the downloaded copy. Returns the new URL.
     private static func move(running: URL, original: URL) throws -> URL {
         let manager = FileManager.default
-        let folder = try destinationFolder()
-        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Speakeasy") + ".app"
-        let destination = folder.appendingPathComponent(name, isDirectory: true)
+        let destination = try destination(excluding: original)
+        let folder = destination.deletingLastPathComponent()
 
         if manager.fileExists(atPath: destination.path) {
-            let path = destination.standardizedFileURL.resolvingSymlinksInPath().path
-            if NSWorkspace.shared.runningApplications.contains(where: {
-                $0.bundleURL?.standardizedFileURL.resolvingSymlinksInPath().path == path
-            }) {
+            // Only ever replace this app: something else that happens to have the name stays.
+            let existingID = Bundle(url: destination)?.bundleIdentifier
+            guard existingID == Bundle.main.bundleIdentifier else {
+                throw MoveError(errorDescription: "\(folder.path) already has a different app named \(destination.lastPathComponent).")
+            }
+            if isRunning(destination) {
                 throw MoveError(errorDescription: "Another copy of Speakeasy is open from \(folder.path). Quit it, then open this one again.")
             }
-            // The copy already there goes to the Trash, so it can be put back.
-            try manager.trashItem(at: destination, resultingItemURL: nil)
-            log.info("Moved the existing \(destination.path, privacy: .public) to the Trash")
         }
 
-        try manager.copyItem(at: running, to: destination)
-        clearQuarantine(destination)
+        // Copy next to the destination first, so a failed copy leaves any existing install as
+        // it was; only then does the existing one go to the Trash (where it can be put back).
+        let staging = folder.appendingPathComponent(".\(destination.lastPathComponent).moving-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try manager.copyItem(at: running, to: staging)
+            clearQuarantine(staging)
+            if manager.fileExists(atPath: destination.path) {
+                try manager.trashItem(at: destination, resultingItemURL: nil)
+                log.info("Moved the existing \(destination.path, privacy: .public) to the Trash")
+            }
+            try manager.moveItem(at: staging, to: destination)
+        } catch {
+            try? manager.removeItem(at: staging)
+            throw error
+        }
         log.info("Copied to \(destination.path, privacy: .public)")
 
-        // The downloaded copy goes to the Trash. Failing here (a read-only disk image, say)
-        // leaves it where it was, which is harmless.
-        if original.standardizedFileURL != destination.standardizedFileURL {
+        // The downloaded copy goes to the Trash. Failing here (a read-only disk image, or no
+        // access to Downloads) leaves it where it was, which is harmless.
+        if !sameFile(original, destination) {
             do {
                 try manager.trashItem(at: original, resultingItemURL: nil)
             } catch {
@@ -125,26 +147,37 @@ enum MoveToApplications {
         return destination
     }
 
-    /// /Applications when this account can write to it, otherwise ~/Applications.
-    private static func destinationFolder() throws -> URL {
+    /// Where the app goes: an existing install of this app in an Applications folder (kept
+    /// under its own name, as Sparkle updates it), or else Speakeasy.app in /Applications, or
+    /// ~/Applications when /Applications isn't writable.
+    private static func destination(excluding original: URL) throws -> URL {
         let manager = FileManager.default
+        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Speakeasy") + ".app"
         #if DEBUG
         if let path = UserDefaults.standard.string(forKey: "MoveToApplicationsFolder") {
             let folder = URL(fileURLWithPath: path, isDirectory: true)
             try manager.createDirectory(at: folder, withIntermediateDirectories: true)
-            return folder
+            return folder.appendingPathComponent(name, isDirectory: true)
         }
         #endif
+        if let id = Bundle.main.bundleIdentifier,
+           let installed = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: id).first(where: {
+               isInApplicationsFolder($0) && !sameFile($0, original) && !isTranslocated($0)
+           }) {
+            return installed
+        }
         let system = URL(fileURLWithPath: "/Applications", isDirectory: true)
-        if manager.isWritableFile(atPath: system.path) { return system }
+        if manager.isWritableFile(atPath: system.path) {
+            return system.appendingPathComponent(name, isDirectory: true)
+        }
         let user = manager.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true)
         try manager.createDirectory(at: user, withIntermediateDirectories: true)
-        return user
+        return user.appendingPathComponent(name, isDirectory: true)
     }
 
-    /// Waits for this process to exit, then opens the moved copy, so the two never run at once
-    /// (only one can hold the volume hot keys).
-    private static func relaunch(at destination: URL) {
+    /// Opens the moved copy once this process has exited, so the two never run at once (only
+    /// one can hold the volume hot keys). False if that couldn't be arranged.
+    private static func relaunch(at destination: URL) -> Bool {
         let pid = ProcessInfo.processInfo.processIdentifier
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -152,18 +185,29 @@ enum MoveToApplications {
                           "sh", String(pid), destination.path]
         do {
             try task.run()
+            return true
         } catch {
             log.error("Couldn't schedule the relaunch: \(error.localizedDescription, privacy: .public)")
+            return false
         }
-        NSApp.terminate(nil)
     }
 
     // MARK: Where the app is
 
+    private static func resolved(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private static func sameFile(_ a: URL, _ b: URL) -> Bool { resolved(a) == resolved(b) }
+
+    private static func isRunning(_ url: URL) -> Bool {
+        let path = resolved(url)
+        return NSWorkspace.shared.runningApplications.contains { $0.bundleURL.map(resolved) == path }
+    }
+
+    /// /Applications, ~/Applications, or an Applications folder on another disk, at any depth.
     private static func isInApplicationsFolder(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
-        let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
-        return ["/Applications", "/System/Applications", home].contains { path.hasPrefix($0 + "/") }
+        resolved(url).contains("/Applications/")
     }
 
     private static func isQuarantined(_ url: URL) -> Bool {
@@ -172,9 +216,8 @@ enum MoveToApplications {
 
     /// Removes the quarantine attribute from every file in the copied bundle.
     private static func clearQuarantine(_ bundle: URL) {
-        let manager = FileManager.default
         var paths = [bundle.path]
-        if let items = manager.enumerator(at: bundle, includingPropertiesForKeys: nil) {
+        if let items = FileManager.default.enumerator(at: bundle, includingPropertiesForKeys: nil) {
             for case let item as URL in items { paths.append(item.path) }
         }
         for path in paths { removexattr(path, "com.apple.quarantine", XATTR_NOFOLLOW) }
@@ -182,7 +225,7 @@ enum MoveToApplications {
 
     // App Translocation has no public API; these Security.framework functions are what
     // macOS offers for it (and what other apps' move prompts use), looked up at run time.
-    private typealias IsTranslocated = @convention(c) (CFURL, UnsafeMutablePointer<Bool>, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Bool
+    private typealias IsTranslocated = @convention(c) (CFURL, UnsafeMutablePointer<Bool>, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> DarwinBoolean
     private typealias OriginalPath = @convention(c) (CFURL, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Unmanaged<CFURL>?
 
     private static let security = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY)
@@ -193,7 +236,7 @@ enum MoveToApplications {
         }
         let function = unsafeBitCast(symbol, to: IsTranslocated.self)
         var translocated = false
-        return function(url as CFURL, &translocated, nil) && translocated
+        return function(url as CFURL, &translocated, nil).boolValue && translocated
     }
 
     private static func originalURL(ofTranslocated url: URL) -> URL? {
