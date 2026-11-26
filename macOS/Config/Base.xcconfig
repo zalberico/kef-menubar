@@ -1,0 +1,29 @@
+// The Mac App Store build of the menu bar app. It joins the iPhone app's App Store listing
+// (universal purchase), so it has the iPhone app's bundle ID. The GitHub build
+// (scripts/build-app.sh, with Sparkle) keeps its own ID, local.kefmenubar.KEFMenuBar.
+// The project sets nothing that is defined here, so these values (and Local.xcconfig's
+// overrides) always apply.
+
+// What the person sees, and the identifiers registered with Apple.
+APP_DISPLAY_NAME = Speakeasy
+APP_BUNDLE_ID = io.github.zalberico.Speakeasy
+DEVELOPMENT_TEAM = 9SYNY7K2HE
+
+// The listing's version (the iPhone app's); the Mac build numbers are their own.
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+MACOSX_DEPLOYMENT_TARGET = 14.0
+
+SWIFT_VERSION = 6.0
+SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated
+SWIFT_APPROACHABLE_CONCURRENCY = NO
+
+CODE_SIGN_STYLE = Automatic
+ENABLE_HARDENED_RUNTIME = YES
+
+// To build with your own Apple team, create macOS/Config/Local.xcconfig (it is gitignored)
+// and override what you need, for example:
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   APP_BUNDLE_ID = com.example.Speakeasy
+#include? "Local.xcconfig"

@@ -6,3 +6,4 @@ build/
 **/xcuserdata/
 *.xcuserstate
 iOS/Config/Local.xcconfig
+macOS/Config/Local.xcconfig
