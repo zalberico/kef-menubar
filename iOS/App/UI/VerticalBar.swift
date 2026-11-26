@@ -115,49 +115,25 @@ private struct RemoteChromeItems: ToolbarContent {
         // The bar draws a badge as a red alert: one update waiting. A badge that changes on
         // an item already in the bar isn't redrawn, so each look is an item of its own.
         let hasBadge = panel == .settings && firmwareUpdateAvailable
-        if isSelected, hasBadge {
-            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: true, isSelected: true)) }
-        } else if isSelected {
-            ToolbarItem(placement: .primaryAction) { selected(panelButton(panel, hasBadge: false, isSelected: true)) }
-        } else if hasBadge {
-            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: true, isSelected: false) }
+        if hasBadge {
+            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: true, isSelected: isSelected) }
         } else {
-            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: false, isSelected: false) }
+            ToolbarItem(placement: .primaryAction) { panelButton(panel, hasBadge: false, isSelected: isSelected) }
         }
     }
 
+    /// The panel shown in the side column isn't highlighted in the bar: a prominent style
+    /// makes the bar draw that item as a separate glass bubble, splitting the group. The
+    /// column's large title already names the panel; VoiceOver hears it as selected.
     private func panelButton(_ panel: UIState.Panel, hasBadge: Bool, isSelected: Bool) -> some View {
         Button {
             open(panel)
         } label: {
-            Label {
-                Text(panel.title)
-            } icon: {
-                if isSelected, let symbol = Self.prominentSymbol(panel.symbol) {
-                    Image(uiImage: symbol)
-                } else {
-                    Image(systemName: panel.symbol)
-                }
-            }
+            Label(panel.title, systemImage: panel.symbol)
         }
         .badge(hasBadge ? 1 : 0)
         .accessibilityValue(hasBadge ? "Firmware update available" : "")
-    }
-
-    /// The symbol in the readable label colour for the amber fill (near-black in dark mode).
-    /// The bar draws its items' symbols in its own colour, ignoring the foreground style,
-    /// so the colour is baked into the image; the dynamic colour still follows the
-    /// appearance and Increase Contrast.
-    private static func prominentSymbol(_ name: String) -> UIImage? {
-        UIImage(systemName: name)?
-            .withTintColor(UIColor(resource: .prominentLabel), renderingMode: .alwaysOriginal)
-    }
-
-    private func selected(_ button: some View) -> some View {
-        // As for every other selected control (the symbol carries the label colour itself).
-        button
-            .prominentGlassStyle()
-            .accessibilityAddTraits(.isSelected)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
