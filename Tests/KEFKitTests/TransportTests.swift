@@ -60,8 +60,8 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct TransportTests {
-    static let host = "192.168.1.78"
-    static let https = "https://192.168.1.78:4430"
+    static let host = "192.0.2.78"
+    static let https = "https://192.0.2.78:4430"
 
     func makeClient(_ mode: TransportMode = .auto) -> KEFClient {
         let config = URLSessionConfiguration.ephemeral
@@ -147,8 +147,8 @@ struct TransportTests {
         try await client.setMuted(false)
         let seen = StubProtocol.seen
         #expect(seen.count == 3)
-        #expect(seen[1].url.hasPrefix("http://192.168.1.78/api/getData"))
-        #expect(seen[2].url == "http://192.168.1.78/api/setData")
+        #expect(seen[1].url.hasPrefix("http://192.0.2.78/api/getData"))
+        #expect(seen[2].url == "http://192.0.2.78/api/setData")
         #expect(seen[2].authorization == nil)
         #expect(!seen.contains(where: Self.isAddUser))
         #expect(await client.transport.isSecure == false)

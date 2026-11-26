@@ -227,18 +227,18 @@ swift build -c release --product kefctl
 K="$(swift build -c release --product kefctl --show-bin-path)/kefctl"
 
 $K discover                        # list speakers on the network
-$K 192.168.1.20 state              # name, power, input, volume, now playing…
-$K 192.168.1.20 volume 30
-$K 192.168.1.20 mute on
-$K 192.168.1.20 source tv          # usb | wifi | tv | optical | coaxial | analog | bluetooth | standby
-$K 192.168.1.20 control pause      # pause | next | previous
-$K 192.168.1.20 eq                 # current input's EQ profile and allowed ranges
-$K 192.168.1.20 eq-set trebleAmount -1
-$K 192.168.1.20 watch 60           # print live events for 60 s (default 30)
-$K 192.168.1.20 settings           # standby, wake source, startup volume, lights, remote
-$K 192.168.1.20 name "Desk"        # rename the speaker
-$K 192.168.1.20 firmware           # installed version and update status
-$K 192.168.1.20 firmware check     # ask the speaker to look for an update (installing is app-only)
+$K 192.0.2.20 state              # name, power, input, volume, now playing…
+$K 192.0.2.20 volume 30
+$K 192.0.2.20 mute on
+$K 192.0.2.20 source tv          # usb | wifi | tv | optical | coaxial | analog | bluetooth | standby
+$K 192.0.2.20 control pause      # pause | next | previous
+$K 192.0.2.20 eq                 # current input's EQ profile and allowed ranges
+$K 192.0.2.20 eq-set trebleAmount -1
+$K 192.0.2.20 watch 60           # print live events for 60 s (default 30)
+$K 192.0.2.20 settings           # standby, wake source, startup volume, lights, remote
+$K 192.0.2.20 name "Desk"        # rename the speaker
+$K 192.0.2.20 firmware           # installed version and update status
+$K 192.0.2.20 firmware check     # ask the speaker to look for an update (installing is app-only)
 ```
 
 ## FAQ
