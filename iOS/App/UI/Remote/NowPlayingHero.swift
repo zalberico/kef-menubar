@@ -2,7 +2,7 @@ import KEFAppCore
 import KEFKit
 import SwiftUI
 
-/// Artwork (or the speaker glyph), what's playing, and the transport buttons (or Turn On),
+/// Artwork (or the speaker cabinet), what's playing, and the transport buttons (or Turn On),
 /// always stacked and centred so the layout never changes with the length of a title.
 struct NowPlayingHero: View {
     /// Inside a scroll view (accessibility sizes): the artwork takes its width, not the
@@ -15,7 +15,7 @@ struct NowPlayingHero: View {
         let showsTrack = model.displaysNowPlaying
         let track = model.player.track
         VStack(spacing: 16) {
-            ArtworkView(artwork: showsTrack ? model.artwork : nil, glyph: model.displaysOn ? .on : .standby)
+            ArtworkView(artwork: showsTrack ? model.artwork : nil, isAsleep: !model.displaysOn)
                 .frame(maxWidth: scrolls ? 104 : 400, maxHeight: scrolls ? nil : .infinity)
                 .layoutPriority(-1)
 
@@ -70,10 +70,11 @@ struct NowPlayingHero: View {
     }
 }
 
-/// A square of artwork, or the glyph on the accent colour.
+/// A square of artwork or, with none (TV, optical, nothing playing, standby), the
+/// full-colour cabinet in the same square, asleep in standby.
 struct ArtworkView: View {
     let artwork: CGImage?
-    let glyph: SpeakerGlyphShape.Style
+    let isAsleep: Bool
 
     var body: some View {
         Color.clear
@@ -83,19 +84,15 @@ struct ArtworkView: View {
                     Image(decorative: artwork, scale: 1)
                         .resizable()
                         .scaledToFill()
+                        .clipShape(ArtworkShape())
+                        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
                         .transition(.opacity)
                 } else {
-                    ZStack {
-                        Rectangle().fill(Color.accentColor.gradient)
-                        SpeakerGlyph(style: glyph)
-                            .foregroundStyle(.white.opacity(0.92))
-                            .scaleEffect(0.48)
-                    }
-                    .transition(.opacity)
+                    CabinetArt(isAsleep: isAsleep)
+                        .padding(.vertical, 4)
+                        .transition(.opacity)
                 }
             }
-            .clipShape(ArtworkShape())
-            .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
             .animation(.easeInOut(duration: 0.35), value: artwork == nil)
             .accessibilityHidden(true)
     }

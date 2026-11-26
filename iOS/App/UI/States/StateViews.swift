@@ -7,15 +7,15 @@ import UIKit
 struct OnboardingView: View {
     @Environment(SpeakerModel.self) private var model
     @Environment(UIState.self) private var ui
+    @ScaledMetric(relativeTo: .largeTitle) private var cabinetHeight = 132
 
     var body: some View {
         let choices = model.speakerChoices
         ScrollView {
             VStack(spacing: 28) {
                 VStack(spacing: 14) {
-                    SpeakerGlyph(style: .on)
-                        .frame(height: 84)
-                        .foregroundStyle(.tint)
+                    CabinetArt()
+                        .frame(height: min(cabinetHeight, 200))
                     Text("Find your speaker")
                         .font(.largeTitle.bold())
                         .multilineTextAlignment(.center)
@@ -147,17 +147,31 @@ struct OfflineView: View {
     @Environment(SpeakerModel.self) private var model
     @Environment(UIState.self) private var ui
     @Environment(\.isWideLayout) private var isWide
+    @ScaledMetric(relativeTo: .title) private var cabinetHeight = 124
 
     var body: some View {
         let retrying = !model.connection.isOffline
         ContentUnavailableView {
-            Label {
+            // Not a Label: its icon slot would shrink the cabinet to symbol size.
+            let height = min(cabinetHeight, 180)
+            VStack(spacing: 14) {
+                CabinetArt(isAsleep: true)
+                    .frame(width: height * CabinetArt.aspectRatio, height: height)
+                    .overlay(alignment: .bottomTrailing) {
+                        // Centred on the cabinet's lower right corner (12.5 and 17.5 of
+                        // the image's 16 × 20 units).
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .orange)
+                            .alignmentGuide(.trailing) { $0[HorizontalAlignment.center] + height * 0.8 * 3.5 / 16 }
+                            .alignmentGuide(.bottom) { $0[VerticalAlignment.center] + height * 2.5 / 20 }
+                    }
                 Text(title)
-            } icon: {
-                SpeakerGlyph(style: .offline)
-                    .frame(height: 56)
-                    .foregroundStyle(.secondary)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
             }
+            .accessibilityElement(children: .combine)
         } description: {
             VStack(spacing: 10) {
                 Text(OfflineExplanation(reason: model.connection.offlineReason ?? ui.lastOfflineReason,

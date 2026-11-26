@@ -69,21 +69,22 @@ extension SpeakerModel {
     }
 }
 
-/// A row of the speaker list: name, product and address, a check on the one in use.
+/// A row of the speaker list: the cabinet, name, product and address, a check on the one in use.
 struct SpeakerRow: View {
     let choice: SpeakerChoice
     let isCurrent: Bool
     let action: () -> Void
+
+    @ScaledMetric(relativeTo: .body) private var cabinetHeight = 38
 
     var body: some View {
         Button {
             action()
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: isCurrent ? "checkmark.circle.fill" : "hifispeaker")
-                    .font(.title3)
-                    .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                    .frame(width: 28)
+                let height = min(cabinetHeight, 64)
+                CabinetArt()
+                    .frame(width: height * CabinetArt.aspectRatio, height: height)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(choice.name)
                         .foregroundStyle(.primary)
@@ -92,6 +93,12 @@ struct SpeakerRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
+                if isCurrent {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)  // the row is marked selected
+                }
             }
             .contentShape(.rect)
         }
