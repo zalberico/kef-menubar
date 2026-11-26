@@ -215,10 +215,20 @@ public final class SpeakerModel {
         runTask = nil
         if let client { Task { await client.transport.close() } }
         client = nil
+        dropQueuedWrites()
         needsDiscovery = rediscover || preferences.lastHost.isEmpty
         retryDelay = .seconds(1)
         connection = .searching
         start()
+    }
+
+    /// Forget volume and EQ writes not sent yet: they were meant for the speaker being left
+    /// (another speaker, or another address), and must never reach the next one.
+    private func dropQueuedWrites() {
+        sourceGeneration += 1  // a writer between two values skips what it already took
+        pendingVolume = nil
+        pendingEQ = nil
+        settleTask?.cancel()
     }
 
     /// Stop talking to the speaker (the iPhone app going to the background), keeping every
@@ -311,6 +321,7 @@ public final class SpeakerModel {
                 if Task.isCancelled { return }
                 client = makeClient(host)
                 if self.host != host {  // another address: forget what the old one reported
+                    dropQueuedWrites()
                     hasCachedState = false
                     modelName = nil
                     firmware = nil

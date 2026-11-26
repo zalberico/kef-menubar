@@ -140,6 +140,26 @@ struct SpeakerModelLifecycleTests {
         await cleanUp(h)
     }
 
+    /// Switching speakers while a volume write to the old one is stuck: the drag value still
+    /// queued behind it must never be written to the newly chosen speaker.
+    @Test func queuedWritesDoNotFollowASpeakerSwitch() async {
+        let h = makeHarness(last: 57)
+        let other = FakeSpeaker(last: 58)
+        h.model.start()
+        #expect(await eventually { h.model.isOnline })
+        h.speaker.delay(3, for: "POST " + KEFPath.volume)  // the old speaker stops answering writes
+        h.model.setVolume(25)
+        try? await Task.sleep(for: .milliseconds(100))  // the writer is now waiting on that POST
+        h.model.setVolume(30)  // queued behind it
+        h.model.useManualHost(other.host)  // the Speakers list's address field
+        #expect(await eventually { h.model.isOnline && h.model.host == other.host })
+        try? await Task.sleep(for: .milliseconds(600))
+        #expect(other.written(KEFPath.volume).isEmpty)
+        #expect(other.writes.isEmpty)
+        #expect(h.speaker.written(KEFPath.volume).allSatisfy { $0 == "25" })
+        await cleanUp(h)
+    }
+
     @Test func anUnknownInputCountsAsOnInTheSnapshot() async {
         let h = makeHarness(last: 56)
         h.speaker.set(KEFPath.physicalSource, typed: "kefPhysicalSource", #""futureInput""#)
