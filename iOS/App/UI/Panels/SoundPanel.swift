@@ -52,9 +52,8 @@ struct SoundPanel: View {
     }
 }
 
-/// A scroll view of grouped cards rather than a `Form`: a form ignores `ScrollPosition`,
-/// and the sheet and the wide layout's column are different views, so the position is
-/// kept in ``UIState`` and scrolled back to when the panel moves between them.
+/// Grouped cards in a ``PanelScrollView`` rather than a `Form`, so the scroll position
+/// survives the move between the sheet and the column.
 private struct SoundForm: View {
     let eq: EqProfile
 
@@ -67,156 +66,66 @@ private struct SoundForm: View {
         // own profile hasn't been read back yet.
         let locked = !model.isOn || model.inputSettling
         let hasSubwoofer = eq.hasSubwoofer
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if !model.isOn {
-                    SoundSection {
-                        StandbyNotice(lastSource: model.lastSource)
-                    }
+        PanelScrollView(position: $ui.soundScroll, offset: $ui.soundOffset) {
+            if !model.isOn {
+                CardSection {
+                    StandbyNotice(lastSource: model.lastSource)
                 }
-
-                SoundSection {
-                    if let name = eq.string(.profileName), !name.isEmpty {
-                        LabeledRow("Profile") {
-                            Text(name).foregroundStyle(.secondary)
-                        }
-                    }
-                    EQSliderRow(title: "Treble", key: .trebleAmount, value: eq.double(.trebleAmount) ?? 0, unit: .decibels)
-                    EQChoiceRow(title: "Bass extension", key: .bassExtension,
-                                value: eq.string(.bassExtension) ?? "standard", options: EQChoice.bassExtension)
-                    EQToggleSliderRow(title: "Desk mode", key: .deskMode, isOn: eq.bool(.deskMode) ?? false,
-                                      settingKey: .deskModeSetting, setting: eq.double(.deskModeSetting) ?? 0,
-                                      settingTitle: "Level", unit: .decibels)
-                    EQToggleSliderRow(title: "Wall mode", key: .wallMode, isOn: eq.bool(.wallMode) ?? false,
-                                      settingKey: .wallModeSetting, setting: eq.double(.wallModeSetting) ?? 0,
-                                      settingTitle: "Level", unit: .decibels)
-                    EQSliderRow(title: "Balance", key: .balance, value: eq.double(.balance) ?? 0, unit: .balance)
-                    EQToggleRow(title: "Phase correction", key: .phaseCorrection, isOn: eq.bool(.phaseCorrection) ?? false)
-                }
-                .disabled(locked)
-
-                SoundSection(header: "Subwoofers", footer: model.isOn
-                             ? "Applies to the \(model.source?.displayName ?? "current") input's profile. The speaker keeps one per input."
-                             : nil) {
-                    SubwooferCountRow(count: eq.subwooferCount)
-                    if hasSubwoofer {
-                        EQSliderRow(title: "Sub level", key: .subwooferGain, value: eq.double(.subwooferGain) ?? 0, unit: .decibels)
-                        if model.offersSubwooferPresets {
-                            SubwooferPresetRows(
-                                stored: eq.string(.subwooferPreset) ?? "",
-                                defaults: eq.subwooferPreset.flatMap { preset in
-                                    eq.presetValues(preset).map { (preset, $0) }
-                                },
-                                isAtDefaults: eq.isAtPresetDefaults)
-                        }
-                        EQSliderRow(title: "Sub crossover", key: .subOutLPFreq, value: eq.double(.subOutLPFreq) ?? 80, unit: .hertz)
-                    }
-                    // Always reachable, like the Mac: with no sub it should normally be off
-                    // (full-range speakers), which setting the count to None does.
-                    EQToggleSliderRow(title: "Speaker high-pass", key: .highPassMode, isOn: eq.bool(.highPassMode) ?? false,
-                                      settingKey: .highPassModeFreq, setting: eq.double(.highPassModeFreq) ?? 0,
-                                      settingTitle: "Frequency", unit: .hertz)
-                    if hasSubwoofer {
-                        EQChoiceRow(title: "Sub polarity", key: .subwooferPolarity,
-                                    value: eq.string(.subwooferPolarity) ?? "normal", options: EQChoice.polarity)
-                        EQToggleRow(title: "Subwoofer output", key: .subwooferOut, isOn: eq.bool(.subwooferOut) ?? false)
-                    }
-                }
-                .disabled(locked)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+
+            CardSection {
+                if let name = eq.string(.profileName), !name.isEmpty {
+                    LabeledRow("Profile") {
+                        Text(name).foregroundStyle(.secondary)
+                    }
+                }
+                EQSliderRow(title: "Treble", key: .trebleAmount, value: eq.double(.trebleAmount) ?? 0, unit: .decibels)
+                EQChoiceRow(title: "Bass extension", key: .bassExtension,
+                            value: eq.string(.bassExtension) ?? "standard", options: EQChoice.bassExtension)
+                EQToggleSliderRow(title: "Desk mode", key: .deskMode, isOn: eq.bool(.deskMode) ?? false,
+                                  settingKey: .deskModeSetting, setting: eq.double(.deskModeSetting) ?? 0,
+                                  settingTitle: "Level", unit: .decibels)
+                EQToggleSliderRow(title: "Wall mode", key: .wallMode, isOn: eq.bool(.wallMode) ?? false,
+                                  settingKey: .wallModeSetting, setting: eq.double(.wallModeSetting) ?? 0,
+                                  settingTitle: "Level", unit: .decibels)
+                EQSliderRow(title: "Balance", key: .balance, value: eq.double(.balance) ?? 0, unit: .balance)
+                EQToggleRow(title: "Phase correction", key: .phaseCorrection, isOn: eq.bool(.phaseCorrection) ?? false)
+            }
+            .disabled(locked)
+
+            CardSection(header: "Subwoofers", footer: model.isOn
+                        ? "Applies to the \(model.source?.displayName ?? "current") input's profile. The speaker keeps one per input."
+                        : nil) {
+                SubwooferCountRow(count: eq.subwooferCount)
+                if hasSubwoofer {
+                    EQSliderRow(title: "Sub level", key: .subwooferGain, value: eq.double(.subwooferGain) ?? 0, unit: .decibels)
+                    if model.offersSubwooferPresets {
+                        SubwooferPresetRows(
+                            stored: eq.string(.subwooferPreset) ?? "",
+                            defaults: eq.subwooferPreset.flatMap { preset in
+                                eq.presetValues(preset).map { (preset, $0) }
+                            },
+                            isAtDefaults: eq.isAtPresetDefaults)
+                    }
+                    EQSliderRow(title: "Sub crossover", key: .subOutLPFreq, value: eq.double(.subOutLPFreq) ?? 80, unit: .hertz)
+                }
+                // Always reachable, like the Mac: with no sub it should normally be off
+                // (full-range speakers), which setting the count to None does.
+                EQToggleSliderRow(title: "Speaker high-pass", key: .highPassMode, isOn: eq.bool(.highPassMode) ?? false,
+                                  settingKey: .highPassModeFreq, setting: eq.double(.highPassModeFreq) ?? 0,
+                                  settingTitle: "Frequency", unit: .hertz)
+                if hasSubwoofer {
+                    EQChoiceRow(title: "Sub polarity", key: .subwooferPolarity,
+                                value: eq.string(.subwooferPolarity) ?? "normal", options: EQChoice.polarity)
+                    EQToggleRow(title: "Subwoofer output", key: .subwooferOut, isOn: eq.bool(.subwooferOut) ?? false)
+                }
+            }
+            .disabled(locked)
         }
-        .scrollPosition($ui.soundScroll)
-        .onScrollPhaseChange { oldPhase, phase, context in
-            // Only where the person left it: a view appearing or going away reports 0.
-            guard oldPhase != .idle, phase == .idle else { return }
-            ui.soundOffset = max(0, context.geometry.contentOffset.y + context.geometry.contentInsets.top)
-        }
-        .onAppear {
-            // A new panel (sheet <-> column) starts where the other one was.
-            if ui.soundOffset > 1 { ui.soundScroll.scrollTo(y: ui.soundOffset) }
-        }
-        .background(Color(uiColor: .systemGroupedBackground))
         .animation(.snappy(duration: 0.25), value: hasSubwoofer)
         .animation(.snappy(duration: 0.25), value: eq.bool(.deskMode))
         .animation(.snappy(duration: 0.25), value: eq.bool(.wallMode))
         .animation(.snappy(duration: 0.25), value: eq.bool(.highPassMode))
-    }
-}
-
-/// An inset grouped card, like a form section: an optional header and footer, and a
-/// separator between rows.
-private struct SoundSection<Content: View>: View {
-    var header: LocalizedStringKey?
-    var footer: LocalizedStringKey?
-    @ViewBuilder var content: Content
-
-    init(header: LocalizedStringKey? = nil, footer: LocalizedStringKey? = nil, @ViewBuilder content: () -> Content) {
-        self.header = header
-        self.footer = footer
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let header {
-                Text(header)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Group(subviews: content) { rows in
-                    ForEach(rows) { row in
-                        row
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        if row.id != rows.last?.id {
-                            Divider().padding(.leading, 16)
-                        }
-                    }
-                }
-            }
-            .background(Color(uiColor: .secondarySystemGroupedBackground),
-                        in: .rect(cornerRadius: 24, style: .continuous))
-            if let footer {
-                Text(footer)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-            }
-        }
-        .padding(.top, 20)
-    }
-}
-
-/// A title and its control on one line; the control under the title at accessibility sizes.
-private struct LabeledRow<Control: View>: View {
-    let title: String
-    @ViewBuilder var control: Control
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    init(_ title: String, @ViewBuilder control: () -> Control) {
-        self.title = title
-        self.control = control()
-    }
-
-    var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
-        layout {
-            Text(title)
-            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-            control
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -386,83 +295,6 @@ private struct EQToggleSliderRow: View {
         }
     }
 }
-
-/// A short choice: segmented, under its title; a menu at accessibility sizes, where three
-/// segments can't fit their words.
-private struct ChoiceRow<Tag: Hashable & Sendable>: View {
-    let title: String
-    let selection: Tag
-    let options: [EQChoice<Tag>]
-    /// Off where the section header already names the choice.
-    var showsTitle = true
-    let choose: (Tag) -> Void
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var changes = 0
-
-    var body: some View {
-        let picker = Picker(title, selection: Binding(get: { selection }, set: { tag in
-            guard tag != selection else { return }
-            changes += 1
-            choose(tag)
-        })) {
-            ForEach(options) { option in
-                Text(option.label).tag(option.tag)
-            }
-        }
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 4) {
-                    if showsTitle {
-                        Text(title)
-                            .accessibilityHidden(true)  // the menu's own label
-                    }
-                    MenuPicker(title: title, valueLabel: options.first { $0.tag == selection }?.label ?? "") {
-                        picker
-                    }
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    if showsTitle {
-                        Text(title)
-                            .accessibilityHidden(true)  // the picker's own label
-                    }
-                    picker
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                }
-            }
-        }
-        .sensoryFeedback(.selection, trigger: changes)
-    }
-}
-
-/// A picker shown as a menu whose label is just the current value and a chevron, with no
-/// button insets, so the value lines up with the other rows' edges (a menu-style `Picker`
-/// brings its own padding, which a `Form` would absorb and these cards don't).
-private struct MenuPicker<Content: View>: View {
-    let title: String
-    let valueLabel: String
-    @ViewBuilder var picker: Content
-
-    var body: some View {
-        Menu {
-            picker
-                .pickerStyle(.inline)
-                .labelsHidden()
-        } label: {
-            HStack(spacing: 4) {
-                Text(valueLabel)
-                Image(systemName: "chevron.up.chevron.down")
-                    .imageScale(.small)
-                    .accessibilityHidden(true)
-            }
-        }
-        .accessibilityLabel(title)
-        .accessibilityValue(valueLabel)
-    }
-}
-
 private struct EQChoiceRow: View {
     let title: String
     let key: EqKey
