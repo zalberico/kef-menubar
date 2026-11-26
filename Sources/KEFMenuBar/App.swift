@@ -40,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if !APPSTORE
+        // A copy just downloaded and opened from Downloads offers to move itself first.
+        if MoveToApplications.offerIfNeeded() { return }
+        #endif
         model.start()
         HotKeyCenter.shared.install()
         HotKeyCenter.shared.handler = { [weak self] action in self?.perform(action) }
