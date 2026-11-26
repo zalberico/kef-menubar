@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speakeasy Support</title>
+  <meta name="description" content="Help for Speakeasy, the iPhone remote for KEF wireless speakers, and the KEF Menu Bar Mac app.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="../site.css">
+  <link rel="icon" href="../speakeasy-icon.png">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <img class="icon" src="../speakeasy-icon.png" alt="">
+      <div>
+        <h1>Speakeasy Support</h1>
+        <p>Help for the iPhone app and the KEF Menu Bar Mac app.</p>
+      </div>
+    </div>
+    <div class="wrap">
+      <nav class="top" aria-label="Site">
+        <a href="../">Home</a>
+        <a href="./" aria-current="page">Support</a>
+        <a href="../privacy/">Privacy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <h3>Contact</h3>
+      <p>For questions, problems or ideas, open an issue on GitHub. It's the fastest way to reach the developer and to follow the fix.</p>
+      <p><a class="button" href="https://github.com/zalberico/kef-menubar/issues/new">Get help or report a problem</a></p>
+      <p class="muted">You'll need a free GitHub account. Please include your speaker model, its firmware version (Settings › Firmware in the app) and what you expected to happen.</p>
+    </div>
+
+    <h2>Common questions</h2>
+
+    <div class="card">
+      <h3>Speakeasy can't find my speaker</h3>
+      <ul>
+        <li>Make sure your iPhone and the speaker are on the same Wi-Fi network (the speaker can be wired to the same network).</li>
+        <li>Allow Local Network access: <b>Settings › Privacy &amp; Security › Local Network › Speakeasy</b>. Speakeasy talks to the speaker directly on your network and can't work without it.</li>
+        <li>Turn the speaker on at the wall and wait for it to join the network, then pull down on the speaker list to scan again.</li>
+        <li>Still nothing? Tap the speaker name at the top of the remote, choose <b>Manual IP Address</b> and type the speaker's address (shown in your router's list of devices).</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Which speakers work?</h3>
+      <table>
+        <tr><th>Tested</th><td>KEF LSX II (firmware 3.1.141), with a KC62 subwoofer</td></tr>
+        <tr><th>Should work</th><td>LSX II LT, LS50 Wireless II and LS60 Wireless, which use the same platform and network API</td></tr>
+        <tr><th>Not supported</th><td>The original LSX and LS50 Wireless, which use a different protocol</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Widgets, Control Center and Siri say they can't reach the speaker</h3>
+      <p>They use the speaker Speakeasy connected to last, so open the app once to choose your speaker. If you turned off Local Network access, turn it back on as above. Volume changes from widgets and Siri never go above the speaker's own volume limit.</p>
+    </div>
+
+    <div class="card">
+      <h3>Firmware updates</h3>
+      <p>Speakeasy shows the installed firmware and can check for updates. An update only starts after you confirm it, and the speaker restarts afterwards. KEF's own app and the speaker's automatic updates work as before.</p>
+    </div>
+
+    <div class="card">
+      <h3>Is Speakeasy made by KEF?</h3>
+      <p>No. Speakeasy is an independent app that works with KEF wireless speakers. It is not affiliated with or endorsed by KEF. KEF is a trademark of its owner.</p>
+    </div>
+
+    <h2>More</h2>
+    <p>The full documentation, including how the app talks to the speaker, is in the project's <a href="https://github.com/zalberico/kef-menubar#readme">README</a>. See also the <a href="../privacy/">privacy policy</a>.</p>
+  </main>
+
+  <footer>
+    <div class="wrap">Speakeasy · Not affiliated with KEF · <a href="https://github.com/zalberico/kef-menubar">Source on GitHub</a></div>
+  </footer>
+</body>
+</html>
