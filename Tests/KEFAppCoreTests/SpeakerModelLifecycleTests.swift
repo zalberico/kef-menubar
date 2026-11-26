@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import KEFKit
 import Testing
 @testable import KEFAppCore
@@ -158,6 +160,38 @@ struct SpeakerModelLifecycleTests {
         #expect(other.writes.isEmpty)
         #expect(h.speaker.written(KEFPath.volume).allSatisfy { $0 == "25" })
         await cleanUp(h)
+    }
+
+    /// Artwork whose load failed (cut off by a suspend's close, say) loads again on resume,
+    /// although the track, and so its URL, didn't change.
+    @Test func missingArtworkLoadsAgainOnResume() async throws {
+        let h = makeHarness(last: 59)
+        let art = "http://" + h.speaker.host + "/art.png"
+        h.speaker.set(KEFPath.playerData, raw: #"{"state":"playing","trackRoles":{"title":"Song","icon":"\#(art)","mediaData":{"metaData":{"artist":"Band"}}}}"#)
+        h.model.start()
+        #expect(await eventually { h.model.isOnline })
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(h.model.artwork == nil)  // nothing served yet: the load failed
+        h.speaker.serve(try Self.png(), at: "/art.png")
+        await h.model.suspend()
+        h.model.resume()
+        #expect(await eventually { h.model.artwork != nil })
+        #expect(h.model.artworkKey == SpeakerModel.artworkKey(for: URL(string: art)!))
+        await cleanUp(h)
+    }
+
+    static func png() throws -> Data {
+        let context = try #require(CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        let image = try #require(context.makeImage())
+        let data = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        #expect(CGImageDestinationFinalize(destination))
+        return data as Data
     }
 
     @Test func anUnknownInputCountsAsOnInTheSnapshot() async {

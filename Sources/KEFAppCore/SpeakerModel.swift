@@ -404,6 +404,10 @@ public final class SpeakerModel {
         try await verifyIdentity(client)
         let queue = client.makeEventQueue()
         try await queue.subscribe(Self.watchedPaths)
+        // Artwork missing for the current track (its load cut off by a suspend's close, or a
+        // failure) is loaded again by this session's first read; once per session, so a
+        // broken URL isn't fetched on every player event.
+        if artwork == nil { artworkURL = nil }
         try await refreshAll(client)
         let secure = await client.transport.isSecure
         try Task.checkCancellation()

@@ -43,6 +43,8 @@ final class FakeSpeaker: @unchecked Sendable {
     /// answers but ignores.
     private var refusedWrites: Set<String> = []
     private var ignoredWrites: Set<String> = []
+    /// Raw files served at their URL path (artwork), on either scheme.
+    private var files: [String: Data] = [:]
 
     private static let all = Box<[String: FakeSpeaker]>([:])
 
@@ -83,6 +85,8 @@ final class FakeSpeaker: @unchecked Sendable {
     func set(_ path: String, string: String) { set(path, typed: "string_", #""\#(string)""#) }
     func set(_ path: String, source: Source) { set(path, typed: "kefPhysicalSource", #""\#(source.rawValue)""#) }
     func remove(_ path: String) { _ = lock.withLock { values.removeValue(forKey: path) } }
+    func serve(_ data: Data, at urlPath: String) { lock.withLock { files[urlPath] = data } }
+    func file(at urlPath: String) -> Data? { lock.withLock { files[urlPath] } }
 
     func delay(_ seconds: TimeInterval, for path: String = "*") { lock.withLock { delays[path] = seconds } }
     func refuseWrites(to path: String) { _ = lock.withLock { refusedWrites.insert(path) } }
@@ -174,6 +178,14 @@ final class FakeSpeakerProtocol: URLProtocol, @unchecked Sendable {
         }
         speaker.began()
         state.withLock { $0.started = true }
+        if let file = speaker.file(at: url.path) {
+            guard finish(speaker) else { return }
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: file)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         let (status, text, delay) = speaker.handle(method: request.httpMethod ?? "GET", url: url, body: body)
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
             guard finish(speaker) else { return }
