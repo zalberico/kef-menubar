@@ -394,12 +394,16 @@ public final class SpeakerModel {
         let queue = client.makeEventQueue()
         try await queue.subscribe(Self.watchedPaths)
         try await refreshAll(client)
+        let secure = await client.transport.isSecure
         try Task.checkCancellation()
+        // Save the speaker's details before going online, in the same main-actor turn:
+        // anything that sees `isOnline` (widgets, intents, the speaker list) then also
+        // sees the preferences written.
+        isSecure = secure
+        rememberSpeaker(client)
         connection = .online
         hasCachedState = true
         retryDelay = .seconds(1)
-        isSecure = await client.transport.isSecure
-        rememberSpeaker(client)
         eqRanges = await client.eqRanges()
         let firmwareWatch = Task { await watchFirmware(client) }
         defer { firmwareWatch.cancel() }
