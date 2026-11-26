@@ -180,37 +180,23 @@ extension UIState.Panel {
     }
 }
 
-/// Symbols with their colour baked in: the vertical bar draws items in its own colour and
-/// shows no disabled dimming, so a state colour has to be part of the image.
-private enum BarSymbol {
-    static func image(_ name: String, _ color: UIColor) -> Image {
-        if let symbol = UIImage(systemName: name)?.withTintColor(color, renderingMode: .alwaysOriginal) {
-            return Image(uiImage: symbol)
-        }
-        return Image(systemName: name)
-    }
-
-    static var accent: UIColor { UIColor(named: "AccentColor") ?? .tintColor }
-}
-
-/// Mute in the vertical bar: saffron while muted, faint while it can't be used (the speaker
-/// is off or an input is settling).
+/// Mute in the vertical bar. The bar draws every item in its own colour (it ignores
+/// foreground styles and recolours baked images), so state shows in the symbol's shape:
+/// a filled slashed speaker while muted; an outline slashed speaker, dimmed by the bar,
+/// while mute can't be used (the speaker is off or an input is settling).
 private struct MuteBarButton: View {
     @Environment(SpeakerModel.self) private var model
 
     var body: some View {
         let muted = model.muted
         let usable = model.isOn && !model.inputSettling
-        let name = muted ? "speaker.slash.fill" : "speaker.wave.2.fill"
         Button {
             model.toggleMute()
         } label: {
-            if !usable {
-                BarSymbol.image(name, .tertiaryLabel)
-            } else if muted {
-                BarSymbol.image(name, BarSymbol.accent)
+            if usable {
+                MuteSymbol(muted: muted)
             } else {
-                MuteSymbol(muted: false)
+                Image(systemName: "speaker.slash")
             }
         }
         .disabled(!usable)
@@ -220,8 +206,8 @@ private struct MuteBarButton: View {
     }
 }
 
-/// Power in the vertical bar, in both states: saffron while on, the bar's own colour in
-/// standby (still clearly tappable), faint while the speaker can't be reached.
+/// Power in the vertical bar, in both states (it never moves): a filled power circle while
+/// the speaker is on, the plain symbol in standby; dimmed by the bar while unreachable.
 private struct BarPowerButton: View {
     @Environment(SpeakerModel.self) private var model
 
@@ -230,13 +216,7 @@ private struct BarPowerButton: View {
         Button {
             model.togglePower()
         } label: {
-            if !model.isOnline {
-                BarSymbol.image("power", .tertiaryLabel)
-            } else if isOn {
-                BarSymbol.image("power", BarSymbol.accent)
-            } else {
-                Image(systemName: "power")
-            }
+            Image(systemName: isOn ? "power.circle.fill" : "power")
         }
         .disabled(!model.isOnline)
         .accessibilityLabel(isOn ? "Put speaker in standby" : "Turn speaker on")
