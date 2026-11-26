@@ -24,11 +24,27 @@ struct PanelStack: View {
                         }
                     }
                 }
+                .modifier(PanelColumnChrome(isSheet: isSheet))
                 #if DEBUG || PROBE
                 .navigationDestination(for: UIState.Route.self) { route in
                     RouteView(route: route)
                 }
                 #endif
+        }
+    }
+}
+
+/// In the wide layout, the side column's toolbar carries the remote's chrome when the
+/// system's vertical bar is on the column's edge (the bar shows the items beside it).
+private struct PanelColumnChrome: ViewModifier {
+    let isSheet: Bool
+
+    @Environment(\.isWideLayout) private var isWide
+
+    func body(content: Content) -> some View {
+        VerticalBarEdgeReader { edge in
+            content.modifier(RemoteChromeToolbar(
+                isShown: !isSheet && ChromeColumn(verticalBarEdge: edge, isWide: isWide) == .panel))
         }
     }
 }

@@ -54,9 +54,28 @@ extension SpeakerModel.Connection {
 }
 
 /// The remote column: the screen for the current phase, its title and power button, the
-/// Sound and Settings bar, and the banners.
+/// Sound and Settings bar, and the banners. Where the system puts toolbar items in a
+/// vertical bar (iOS 27.1, on an edge of the window), the remote's chrome moves there and
+/// the bottom bar goes, so the screen keeps only the compact remote.
 struct RemoteScreen: View {
     let layout: RemoteLayout
+
+    @Environment(\.isWideLayout) private var isWide
+
+    var body: some View {
+        VerticalBarEdgeReader { edge in
+            RemoteScreenBody(layout: layout, verticalBarEdge: edge,
+                             hostsChrome: ChromeColumn(verticalBarEdge: edge, isWide: isWide) == .remote)
+        }
+    }
+}
+
+private struct RemoteScreenBody: View {
+    let layout: RemoteLayout
+    /// The edge holding the system's vertical bar, `nil` without one.
+    let verticalBarEdge: HorizontalEdge?
+    /// This column's toolbar puts the remote's chrome in the vertical bar.
+    let hostsChrome: Bool
 
     @Environment(SpeakerModel.self) private var model
     @Environment(UIState.self) private var ui
@@ -64,6 +83,7 @@ struct RemoteScreen: View {
 
     var body: some View {
         let phase = RemotePhase(model: model, ui: ui, network: network)
+        let usesVerticalBar = verticalBarEdge != nil
         PhaseContent(phase: phase, layout: layout)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background { RemoteBackdrop() }
@@ -73,8 +93,9 @@ struct RemoteScreen: View {
                 if phase.showsSpeakerChrome {
                     ToolbarItem(placement: .principal) { StatusTitle(phase: phase) }
                     // One power control at a time: in standby the hero's Turn On button is the
-                    // way back, so the toolbar's standby button only shows while the speaker is on.
-                    if model.isOn {
+                    // way back, so the toolbar's standby button only shows while the speaker is
+                    // on. With a vertical bar it is part of the chrome there instead.
+                    if model.isOn, !usesVerticalBar {
                         if #available(iOS 27, *) {
                             ToolbarItem(placement: .topBarPinnedTrailing) { PowerButton() }
                         } else {
@@ -83,9 +104,11 @@ struct RemoteScreen: View {
                     }
                 }
             }
+            .modifier(RemoteChromeToolbar(isShown: hostsChrome))
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaBar(edge: .bottom) {
-                if case .remote = phase { PanelBar() }
+                // Sound and Settings live in the vertical bar when there is one.
+                if case .remote = phase, !usesVerticalBar { PanelBar() }
             }
             .modifier(OfflineMemory())
     }

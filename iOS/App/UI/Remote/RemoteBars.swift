@@ -13,6 +13,16 @@ struct PanelBar: View {
     var body: some View {
         let selected: UIState.Panel? = isWide ? ui.columnPanel : nil
         let iconOnly = dynamicTypeSize.isAccessibilitySize
+        // Both titles, or (a narrow remote column) both symbols alone.
+        ViewThatFits(in: .horizontal) {
+            buttons(selected: selected, iconOnly: iconOnly)
+            buttons(selected: selected, iconOnly: true)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+    }
+
+    private func buttons(selected: UIState.Panel?, iconOnly: Bool) -> some View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 PanelButton(title: "Sound", symbol: "slider.horizontal.3", isSelected: selected == .sound,
@@ -25,8 +35,6 @@ struct PanelBar: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
     }
 }
 
@@ -36,7 +44,8 @@ private struct PanelButton: View {
     let isSelected: Bool
     /// A dot for news (a firmware update).
     let showsBadge: Bool
-    /// Accessibility text sizes: the symbol only (the large content viewer shows the title).
+    /// Accessibility text sizes, or titles that don't fit: the symbol only (the large
+    /// content viewer shows the title).
     let iconOnly: Bool
     let action: () -> Void
 
@@ -47,16 +56,16 @@ private struct PanelButton: View {
             Label(title, systemImage: symbol)
                 .labelStyle(iconOnly ? AnyLabelStyle.iconOnly : .titleAndIcon)
                 .font(.body.weight(.semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, minHeight: 30)
-                .overlay(alignment: .topTrailing) {
-                    if showsBadge {
-                        Circle()
-                            .fill(.red)
-                            .frame(width: 9, height: 9)
-                            .offset(x: -6, y: -2)
-                    }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, minHeight: 30)
+            .overlay(alignment: .topTrailing) {
+                if showsBadge {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 9, height: 9)
+                        .offset(x: -6, y: -2)
                 }
+            }
         }
         .controlSize(.large)
         .accessibilityLabel(title)

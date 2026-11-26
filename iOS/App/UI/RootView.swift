@@ -83,7 +83,7 @@ private struct AdaptiveRoot: View {
                 .presentationDetents([.medium, .large])
                 .environment(\.isWideLayout, false)
         }
-        .onChange(of: isWide) { _, wide in
+        .onChange(of: isWide, initial: true) { _, wide in
             ui.layoutChanged(isWide: wide)
         }
     }

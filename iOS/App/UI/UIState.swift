@@ -80,16 +80,27 @@ final class UIState {
     /// The layout changed. Going wide closes the sheet (the column shows its panel);
     /// going back to compact keeps the choice but never reopens a sheet by itself.
     func layoutChanged(isWide: Bool) {
+        sheetLayoutIsWide = isWide
         if isWide { isSheetPresented = false }
     }
 
+    /// The layout as of the last change. The sheet's binding was made for one layout, and
+    /// the system can still set it after the layout went wide (it closes the sheet once
+    /// the unfold has happened), so its setter asks this instead of what it captured.
+    @ObservationIgnored private var sheetLayoutIsWide = false
+
     /// The sheet's binding: the system may set it to `false` because the layout changed
-    /// (not because it was dismissed), which is ignored unless the layout is still compact.
+    /// (not because it was dismissed), which is ignored unless the layout is still compact,
+    /// so unfolding with the sheet open keeps its drafts and scroll position for the column.
     func sheetBinding(isWide: Bool) -> Binding<Bool> {
         Binding(
             get: { [unowned self] in !isWide && self.isSheetPresented && self.panel != nil },
             set: { [unowned self] presented in
-                if presented { self.isSheetPresented = true } else if !isWide { self.closeSheet() }
+                if presented {
+                    self.isSheetPresented = true
+                } else if !isWide, !self.sheetLayoutIsWide {
+                    self.closeSheet()
+                }
             })
     }
 
