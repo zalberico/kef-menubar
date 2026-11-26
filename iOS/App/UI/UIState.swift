@@ -34,6 +34,23 @@ final class UIState {
     /// to, so it is tracked here and scrolled back to when the panel moves between the
     /// sheet and the column. Closing the sheet starts it at the top again.
     var soundOffset: CGFloat = 0
+    var settingsScroll = ScrollPosition(edge: .top)
+    var settingsOffset: CGFloat = 0
+
+    // Settings drafts. The sheet and the column are different views, so anything typed or
+    // half-dragged lives here, not in their `@State`.
+
+    /// The name being typed; `nil` shows the speaker's name as it is.
+    var renameDraft: String?
+    /// A name sent to the speaker and not yet confirmed. The field keeps what was typed if
+    /// the rename fails, so it can be sent again.
+    var pendingRename: String?
+    /// The volume limit slider while it's dragged (written on release).
+    var maximumVolumeDraft: Double?
+    /// Startup volume sliders while they're dragged, by input (`"all"` for one level).
+    var startupVolumeDrafts: [String: Double] = [:]
+    /// The firmware update confirmation is showing.
+    var confirmingFirmwareUpdate = false
 
     /// The manual address being typed (Speakers and onboarding).
     var manualHostDraft = ""
@@ -77,12 +94,36 @@ final class UIState {
     func closeSheet() {
         isSheetPresented = false
         soundOffset = 0
+        settingsOffset = 0
+        clearSettingsDrafts()
+    }
+
+    /// Forget what was typed or dragged in Settings (a rename already sent still finishes).
+    func clearSettingsDrafts() {
+        if pendingRename == nil { renameDraft = nil }
+        maximumVolumeDraft = nil
+        startupVolumeDrafts = [:]
+        confirmingFirmwareUpdate = false
+    }
+
+    /// Settle a pending rename against what the model reports: the model puts the old name
+    /// back when the speaker refuses it (keep the typed text, so it can be sent again), and
+    /// saves the name once the speaker took it (show the speaker's name again).
+    func reconcileRename(modelName: String, savedName: String) {
+        guard let pending = pendingRename else { return }
+        if modelName != pending {
+            pendingRename = nil
+        } else if savedName == pending {
+            pendingRename = nil
+            renameDraft = nil
+        }
     }
 
     /// A connection change the person asked for (another speaker, an address).
     func connectionChosen() {
         showsOffline = false
         lastOfflineReason = nil
+        pendingRename = nil
         closeSheet()
     }
 }

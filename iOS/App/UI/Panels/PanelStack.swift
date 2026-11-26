@@ -40,7 +40,7 @@ private struct PanelContent: View {
         switch panel {
         case .speakers: SpeakersPanel()
         case .sound: SoundPanel()
-        case .settings: SettingsPlaceholder()
+        case .settings: SettingsPanel()
         }
     }
 }
@@ -56,26 +56,3 @@ private struct RouteView: View {
     }
 }
 #endif
-
-private struct SettingsPlaceholder: View {
-    @Environment(SpeakerModel.self) private var model
-
-    var body: some View {
-        PanelPlaceholder(
-            title: "Settings", symbol: "gearshape",
-            message: model.firmwareUpdateAvailable
-                ? "Speaker settings arrive in a later build. A firmware update is available for \(model.name); you can install it from KEF Connect for now."
-                : "Speaker settings arrive in a later build.")
-    }
-}
-
-private struct PanelPlaceholder: View {
-    let title: String
-    let symbol: String
-    let message: String
-
-    var body: some View {
-        ContentUnavailableView("Coming Soon", systemImage: symbol, description: Text(message))
-            .navigationTitle(title)
-    }
-}
