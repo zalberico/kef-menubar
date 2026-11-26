@@ -14,6 +14,13 @@
 #   NOTARY_KEY_P8              base64 of an App Store Connect API key (.p8)
 #   NOTARY_KEY_ID              that key's ID
 #   NOTARY_ISSUER_ID           the issuer ID shown on the App Store Connect keys page
+#
+# Auto-updates: the app checks appcast.xml on the latest release (Sparkle). With this secret,
+# a tag's release also gets an appcast.xml whose item is the zip, EdDSA-signed. Without it
+# the release is published without an appcast and installed copies don't see the update.
+#
+#   SPARKLE_ED_PRIVATE_KEY     the Sparkle EdDSA private key (generate_keys -x), matching
+#                              SUPublicEDKey in Resources/Info.plist
 name: Release
 
 on:
@@ -24,7 +31,10 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/build-app.sh
+      - scripts/make-appcast.sh
       - Package.swift
+      - Package.resolved
+      - Resources/**
       - Sources/**
       - Tests/**
 
@@ -126,11 +136,30 @@ jobs:
           path: ${{ steps.version.outputs.zip }}
           if-no-files-found: error
 
+      # Signs the zip that was just packaged, so this runs for test builds too (as a check);
+      # only a tag's appcast is published.
+      - name: Appcast
+        id: appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          ZIP: ${{ steps.version.outputs.zip }}
+        run: |
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" ]]; then
+            echo "::notice::No SPARKLE_ED_PRIVATE_KEY secret, so no appcast.xml: installed copies won't be offered this build."
+            exit 0
+          fi
+          repo="https://github.com/$GITHUB_REPOSITORY"
+          scripts/make-appcast.sh "$ZIP" "$repo/releases/download/$GITHUB_REF_NAME/$ZIP" \
+            "$repo/releases/tag/$GITHUB_REF_NAME" appcast.xml
+          cat appcast.xml
+          echo "file=appcast.xml" >> "$GITHUB_OUTPUT"
+
       - name: Publish release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP: ${{ steps.version.outputs.zip }}
+          APPCAST: ${{ steps.appcast.outputs.file }}
         run: |
           if [[ -n "${CODESIGN_IDENTITY:-}" && -n "$NOTARY_KEY_P8" ]]; then
             note="Signed with Developer ID and notarized by Apple: unzip, move **KEF Menu Bar** to Applications and open it."
@@ -138,5 +167,7 @@ jobs:
             note="This build is not notarized. After unzipping and moving **KEF Menu Bar** to Applications, open it once, then allow it in **System Settings › Privacy & Security › Open Anyway**. See the README for details."
           fi
           notes="$(printf '%s\n\nRequires macOS 14 Sonoma or later on Apple silicon.\n\n' "$note")"
-          gh release create "$GITHUB_REF_NAME" "$ZIP" --title "KEF Menu Bar $GITHUB_REF_NAME" \
-            --notes "$notes" --generate-notes --verify-tag
+          # gh uploads the assets to a draft and publishes it after, so the release only
+          # becomes "latest" (where installed copies look for appcast.xml) with both in place.
+          gh release create "$GITHUB_REF_NAME" "$ZIP" ${APPCAST:+"$APPCAST"} \
+            --title "KEF Menu Bar $GITHUB_REF_NAME" --notes "$notes" --generate-notes --verify-tag
