@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/app-icon.png" width="128" alt="KEF Menu Bar app icon">
+  <img src="docs/app-icon.png" width="128" alt="Speakeasy app icon">
 </p>
 
-<h1 align="center">KEF Menu Bar</h1>
+<h1 align="center">Speakeasy</h1>
 
 <p align="center">
   Control your KEF wireless speakers from the Mac menu bar.<br>
@@ -12,17 +12,17 @@
 ---
 
 If you have KEF speakers on your desk, you've probably reached for your phone and opened
-KEF Connect just to turn the volume down or switch from TV to USB. This is a small native
-macOS app that puts those controls in the menu bar, with global keyboard shortcuts for
-volume. There's also an [iPhone app, Speakeasy](#iphone-app-speakeasy), built on the same
-code.
+KEF Connect just to turn the volume down or switch from TV to USB. Speakeasy is a small
+native macOS app that puts those controls in the menu bar, with global keyboard shortcuts
+for volume. (Up to version 1.2 the Mac app was called KEF Menu Bar.) There's also an
+[iPhone app](#iphone-app-speakeasy) of the same name, built on the same code.
 
 It talks to the speaker's own local API, the same one KEF Connect uses. Nothing goes
 through KEF's servers. The only third-party code is [Sparkle](https://sparkle-project.org),
 which the Mac app uses to update itself.
 
 <p align="center">
-  <img src="docs/panel.png" width="354" alt="The KEF Menu Bar panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
+  <img src="docs/panel.png" width="354" alt="The Speakeasy panel: speaker name and power, volume slider, input tiles with USB selected, subwoofer level, and the expanded Sound section with treble, bass extension, desk and wall mode, balance, phase correction, sub crossover, high-pass, sub polarity and subwoofer output">
 </p>
 
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
@@ -128,7 +128,8 @@ your local network.
   install one after a confirmation. The panel tells you when an update is available.
 - **App settings:** Bonjour discovery or a fixed IP address, shortcut volume step and
   overlay, launch at login
-- **Updates itself** with Sparkle, after asking you first (see [Updates](#updates))
+- **Updates itself** with Sparkle, after asking you first (see [Updates](#updates)); the
+  Mac App Store version is updated by the App Store instead
 - **Native and light:** SwiftUI, light and dark mode, no Dock icon, under 5 MB
 
 The menu bar icon is a little bookshelf speaker with KEF's Uni-Q driver, not Apple's
@@ -142,7 +143,7 @@ speaker symbol, so you can tell it apart from the system volume:
 
 | | |
 | --- | --- |
-| **Mac** | macOS 14 Sonoma or later, Apple silicon |
+| **Mac** | macOS 14 Sonoma or later; the GitHub download is for Apple silicon |
 | **iPhone** | iOS 26 or later; building it needs Xcode 27.1 or later |
 | **Tested** | KEF LSX II, firmware 3.1.141, with a KC62 |
 | **Should work** | LSX II LT, LS50 Wireless II, LS60 Wireless (same W2 platform and API) |
@@ -157,14 +158,19 @@ This section is for the Mac app. For the iPhone app, see
 
 ### Download
 
-1. Download the latest **KEF-Menu-Bar-….zip** from
+1. Download the latest **Speakeasy-….zip** from
    [Releases](https://github.com/zalberico/kef-menubar/releases/latest) and unzip it.
-2. Move **KEF Menu Bar** to your Applications folder and open it. The app is signed and
+2. Move **Speakeasy** to your Applications folder and open it. The app is signed and
    notarized by Apple, so macOS only asks you to confirm opening an app downloaded from
    the internet.
 3. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
    the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
    Privacy & Security › Local Network.
+
+Already using **KEF Menu Bar**? It's the same app under its new name, and it updates
+itself to Speakeasy like any other update, keeping your speaker, shortcuts and settings.
+The update replaces the app where it is, so in Applications it keeps the name
+"KEF Menu Bar"; you can leave it that way.
 
 #### Updates
 
@@ -185,6 +191,12 @@ panel and enter the speaker's IP address. You'll find the address in KEF Connect
 speaker's settings, or in your router's client list. A DHCP reservation for the speaker is
 a good idea either way.
 
+### Mac App Store
+
+Speakeasy for Mac is coming to the Mac App Store as part of the same listing as the iPhone
+app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps it up to
+date. Until it's out, use the download above.
+
 ### Build it yourself
 
 If you'd rather build from source, it takes about a minute.
@@ -201,9 +213,10 @@ If you'd rather build from source, it takes about a minute.
    cd kef-menubar
    scripts/build-app.sh --install
    ```
-   This builds **KEF Menu Bar.app**, signs it, copies it to `~/Applications` and launches
-   it. The script signs with your first "Apple Development" certificate if you have one and
-   ad-hoc otherwise; set `CODESIGN_IDENTITY` to override.
+   This builds **Speakeasy.app**, signs it, copies it to `~/Applications` (over a
+   `KEF Menu Bar.app` there, if you have one) and launches it. The script signs with your
+   first "Apple Development" certificate if you have one and ad-hoc otherwise; set
+   `CODESIGN_IDENTITY` to override.
 4. Allow **Local Network** access on first launch, as above.
 
 To update later, run `git pull` and `scripts/build-app.sh --install` again. A copy you
@@ -300,7 +313,8 @@ your speaker, with two exceptions. Album art loads from whatever address the spe
 reports for the current track, sometimes a streaming service's image server. And the Mac
 app's update checks, once you've allowed them or when you click **Check for Updates…**,
 fetch `appcast.xml` from GitHub, which sees your IP address like any download; Sparkle's
-optional system profile is turned off, so nothing else is sent.
+optional system profile is turned off, so nothing else is sent. (The Mac App Store version
+has no update checks of its own.)
 
 **Multiple speakers?** The Mac app controls one speaker (a stereo pair counts as one). You
 can pick which one in Settings, and the app then sticks to that speaker by its MAC address,
@@ -309,10 +323,10 @@ connected to, and you switch between them from the speaker's name at the top of 
 Its widgets, controls and Siri act on the speaker you picked last.
 
 **Is it on the App Store?** The iPhone app has been submitted as *Speakeasy: Hi-Fi
-Remote* and will be there once Apple approves it. A Mac App Store version of the menu bar
-app is in the works. In the meantime the Mac releases here are signed with Developer ID,
-notarized by Apple and keep themselves up to date, which is all macOS needs to open them
-without a warning.
+Remote* and will be there once Apple approves it. The Mac app is coming to the Mac App
+Store under the same listing. In the meantime the Mac releases here are signed with
+Developer ID, notarized by Apple and keep themselves up to date, which is all macOS needs
+to open them without a warning.
 
 ## How it works
 
@@ -360,29 +374,47 @@ The client falls back to plain HTTP on port 80 for older firmware that doesn't s
 ```bash
 swift test                        # signing vectors, JSON, requests, transport, EQ, safety,
                                   # the shared speaker model, volume rules and commands
-scripts/build-app.sh              # build and sign into build/ without installing
+scripts/build-app.sh              # build and sign build/Speakeasy.app without installing
 
 # The iPhone app and its widget extension (Xcode 27.1+)
 xcodebuild -project iOS/Remote.xcodeproj -scheme Remote \
   -destination 'generic/platform=iOS Simulator' build
+
+# The Mac App Store build: the same app, sandboxed, without Sparkle (Xcode 27.1+)
+xcodebuild -project macOS/Speakeasy.xcodeproj -scheme Speakeasy \
+  -destination 'generic/platform=macOS' build
 ```
+
+The Mac App Store build compiles `Sources/KEFMenuBar` with the `APPSTORE` compilation
+condition, which leaves out Sparkle, **Check for Updates…** and the update settings. It
+has the iPhone app's bundle ID (`io.github.zalberico.Speakeasy`, so one listing covers
+both), its own build numbers in `macOS/Config/Base.xcconfig`, and only two entitlements:
+the App Sandbox and outgoing network connections, which is all Bonjour discovery, the
+speaker and album art need. To ship it, archive the **Speakeasy** scheme in Xcode and
+distribute it to App Store Connect; that needs an Apple Distribution and a Mac Installer
+Distribution certificate. To build it with your own team, create
+`macOS/Config/Local.xcconfig` (gitignored) with `DEVELOPMENT_TEAM` and `APP_BUNDLE_ID`.
+The GitHub build keeps its own bundle ID (`local.kefmenubar.KEFMenuBar`), so installed
+copies keep their settings and updates.
 
 | Path | What |
 | --- | --- |
 | `Sources/KEFKit` | Protocol library: transport (HTTPS 4430 with HTTP fallback), KEF CA pinning, HMAC signing, typed values, events, EQ, Bonjour discovery. No dependencies. |
 | `Sources/KEFAppCore` | What both apps share: the live speaker model, preferences, the volume rules, and the one-shot commands the widgets, controls and Siri use. |
-| `Sources/KEFMenuBar` | The Mac app: menu bar extra, Settings, hot keys, volume overlay, icon drawing. |
+| `Sources/KEFMenuBar` | The Mac app: menu bar extra, Settings, hot keys, volume overlay, menu bar icon drawing. Both Mac builds compile it. |
 | `Sources/kefctl` | The CLI above. |
 | `Tests/KEFKitTests`, `Tests/KEFAppCoreTests` | Swift Testing suites. The tests never touch a real speaker. |
+| `macOS/` | The Mac App Store build: `Speakeasy.xcodeproj` (scheme **Speakeasy**), build settings and entitlements (`Config/`), and the icon catalog and privacy manifest (`Resources/`). |
 | `iOS/` | The iPhone app: `Remote.xcodeproj` (scheme **Remote**), the app (`App/`), the widget and controls extension (`Widgets/`), code both use (`Shared/`) and build settings (`Config/`). |
-| `scripts/build-app.sh` | Builds, signs and optionally installs the Mac `.app`, with Sparkle embedded. |
+| `scripts/build-app.sh` | Builds, signs and optionally installs the GitHub build, `Speakeasy.app`, with Sparkle embedded. |
 | `scripts/make-appcast.sh` | Signs a release zip with the Sparkle key and writes its `appcast.xml`. |
-| `scripts/make-icon.swift` | Renders `Resources/AppIcon.icns` from the same drawing as the menu bar icon. |
-| `scripts/make-ios-icon.swift` | Renders the iPhone app icon and its speaker art into `iOS/App/Assets.xcassets`. |
+| `scripts/make-ios-icon.swift` | Renders the app icon: the iPhone icon and its speaker art into `iOS/App/Assets.xcassets`, and with `--mac` the same icon in macOS style into `Resources/AppIcon.icns` and `macOS/Resources/Assets.xcassets`. |
 | `scripts/signing_vectors.py` | Regenerates the signing test vectors from a pykefcontrol wheel. |
 
-Debug builds of the iPhone app take a `-DemoSpeaker` launch argument: a made-up speaker,
+Debug builds of both apps take a `-DemoSpeaker` launch argument: a made-up speaker,
 served in-process, so nothing touches the network. The screenshots above come from it.
+On the Mac, run the **Speakeasy** scheme with the argument turned on (it's in the scheme,
+off), or `swift run KEFMenuBar -DemoSpeaker`. Release builds don't contain it.
 
 **Update signing key.** Sparkle checks updates against `SUPublicEDKey` in
 `Resources/Info.plist`. The matching private key is in the maintainer's login keychain

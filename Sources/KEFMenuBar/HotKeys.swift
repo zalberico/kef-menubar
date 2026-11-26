@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Observation
+import os
 
 enum HotKeyAction: String, CaseIterable, Identifiable {
     case volumeUp, volumeDown, mute
@@ -127,6 +128,7 @@ final class HotKeyCenter {
     @ObservationIgnored private var repeatTask: Task<Void, Never>?
     @ObservationIgnored private var monitor: Any?
     private static let signature: OSType = 0x4B45_466D  // 'KEFm'
+    private static let log = Logger(subsystem: "KEFMenuBar", category: "hotkeys")
 
     private init() {}
 
@@ -156,9 +158,13 @@ final class HotKeyCenter {
         guard let combo else { return }
         var ref: EventHotKeyRef?
         let id = EventHotKeyID(signature: Self.signature, id: UInt32(HotKeyAction.allCases.firstIndex(of: action)! + 1))
-        if RegisterEventHotKey(combo.keyCode, combo.modifiers, id, GetApplicationEventTarget(), 0, &ref) == noErr, let ref {
+        let status = RegisterEventHotKey(combo.keyCode, combo.modifiers, id, GetApplicationEventTarget(), 0, &ref)
+        if status == noErr, let ref {
             refs[action] = ref
             combos[action] = combo
+            Self.log.info("hot key registered: \(action.rawValue, privacy: .public) \(combo.display, privacy: .public)")
+        } else {
+            Self.log.error("hot key unavailable: \(action.rawValue, privacy: .public) \(combo.display, privacy: .public) (status \(status))")
         }
     }
 

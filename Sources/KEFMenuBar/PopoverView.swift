@@ -596,7 +596,9 @@ private struct OfflineView: View {
 
 private struct FooterView: View {
     @Environment(SpeakerModel.self) private var model
+    #if !APPSTORE
     @Environment(AppUpdater.self) private var updater
+    #endif
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -623,15 +625,17 @@ private struct FooterView: View {
                 .buttonStyle(.borderless)
                 .font(.system(size: 11))
             }
+            #if !APPSTORE
             if let version = updater.pendingVersion {
                 Button {
                     updater.checkForUpdates()
                 } label: {
-                    Label("KEF Menu Bar \(version) is available", systemImage: "arrow.down.app")
+                    Label("Speakeasy \(version) is available", systemImage: "arrow.down.app")
                 }
                 .buttonStyle(.borderless)
                 .font(.system(size: 11))
             }
+            #endif
             Divider()
             HStack {
                 Button("Settings…") {
@@ -640,9 +644,11 @@ private struct FooterView: View {
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 Spacer()
+                #if !APPSTORE
                 Button("Check for Updates…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
                 Spacer()
+                #endif
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q", modifiers: .command)
             }

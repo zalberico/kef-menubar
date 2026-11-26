@@ -11,17 +11,30 @@
 // Run: swift scripts/make-ios-icon.swift iOS/App/Assets.xcassets
 // It writes AppIcon.appiconset and SpeakerCabinet.imageset inside the catalog; the icon
 // PNGs come out byte-identical on every run, so regenerating the art never changes them.
-// (The Mac app's icon is made by make-icon.swift from build-app.sh; this script is separate.)
+//
+// The Mac app (Speakeasy for Mac) uses the same icon in macOS style: the same drawing on
+// a rounded-rect body on the 1024 grid (824 pt body, 100 pt margins) with a soft shadow.
+//   swift scripts/make-ios-icon.swift --mac Resources/AppIcon.icns macOS/Resources/Assets.xcassets
+// writes the GitHub build's AppIcon.icns and the Mac App Store build's AppIcon.appiconset
+// (16 to 512 pt, 1x and 2x). build-app.sh runs it when the icns is missing or older than
+// this script.
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-guard CommandLine.arguments.count == 2 else {
-    FileHandle.standardError.write(Data("usage: swift scripts/make-ios-icon.swift <Assets.xcassets dir>\n".utf8))
+let usage = """
+    usage: swift scripts/make-ios-icon.swift <iOS Assets.xcassets dir>
+           swift scripts/make-ios-icon.swift --mac <AppIcon.icns> [<macOS Assets.xcassets dir>]
+
+    """
+let arguments = Array(CommandLine.arguments.dropFirst())
+let macMode = arguments.first == "--mac"
+guard macMode ? (2...3).contains(arguments.count) : arguments.count == 1 else {
+    FileHandle.standardError.write(Data(usage.utf8))
     exit(2)
 }
-let catalogDir = CommandLine.arguments[1]
+let catalogDir = arguments.last!
 let cs = CGColorSpace(name: CGColorSpace.sRGB)!
 
 // MARK: - Colour helpers
@@ -350,6 +363,82 @@ func renderIcon(_ p: Palette) -> CGImage {
     drawIcon(ctx, size: 1024, p: p)
     return ctx.makeImage()!
 }
+
+// MARK: - macOS icon
+
+/// The icon in macOS style at `pixels` px: the iPhone icon's ground and cabinet, drawn on
+/// the macOS grid's rounded-rect body (824/1024 with a 100/1024 margin all round) over a
+/// soft drop shadow, with a faint light edge so it holds on dark backgrounds.
+func renderMacIcon(_ p: Palette, pixels: Int) -> CGImage {
+    let S = CGFloat(pixels)
+    let ctx = makeContext(pixels, pixels, opaque: false)
+    let inset = S * 100 / 1024
+    let body = CGRect(x: inset, y: inset, width: S - 2 * inset, height: S - 2 * inset)
+    // Continuous corners, radius 185/824 like the macOS template's body.
+    let shape = smoothRect(body, body.width * 185 / 824)
+    ctx.with {
+        ctx.setShadow(offset: CGSize(width: 0, height: -S * 10 / 1024), blur: S * 22 / 1024, color: black(0.32))
+        ctx.addPath(shape); ctx.setFillColor(p.bgBottom); ctx.fillPath()
+    }
+    ctx.with {
+        ctx.addPath(shape); ctx.clip()
+        ctx.translateBy(x: body.minX, y: body.minY)
+        drawIcon(ctx, size: body.width, p: p)
+    }
+    ctx.with {
+        ctx.addPath(shape); ctx.clip()
+        ctx.addPath(shape); ctx.setStrokeColor(white(0.10)); ctx.setLineWidth(max(1, S / 512)); ctx.strokePath()
+    }
+    return ctx.makeImage()!
+}
+
+if macMode {
+    let icnsPath = arguments[1]
+    let fm = FileManager.default
+    let iconset = fm.temporaryDirectory.appendingPathComponent("AppIcon-\(getpid()).iconset")
+    try? fm.removeItem(at: iconset)
+    try fm.createDirectory(at: iconset, withIntermediateDirectories: true)
+    var entries: [String] = []
+    for points in [16, 32, 128, 256, 512] {
+        for scale in [1, 2] {
+            let file = scale == 1 ? "icon_\(points)x\(points).png" : "icon_\(points)x\(points)@2x.png"
+            writePNG(renderMacIcon(colour, pixels: points * scale), file, in: iconset.path)
+            entries.append("    {\n      \"filename\" : \"\(file)\",\n      \"idiom\" : \"mac\",\n      \"scale\" : \"\(scale)x\",\n      \"size\" : \"\(points)x\(points)\"\n    }")
+        }
+    }
+    let iconutil = Process()
+    iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
+    iconutil.arguments = ["-c", "icns", iconset.path, "-o", icnsPath]
+    try iconutil.run()
+    iconutil.waitUntilExit()
+    guard iconutil.terminationStatus == 0 else {
+        FileHandle.standardError.write(Data("iconutil failed\n".utf8))
+        exit(1)
+    }
+    print("wrote \(icnsPath)")
+    if arguments.count == 3 {
+        let setDir = URL(fileURLWithPath: catalogDir).appendingPathComponent("AppIcon.appiconset")
+        try fm.createDirectory(at: setDir, withIntermediateDirectories: true)
+        for file in try fm.contentsOfDirectory(atPath: setDir.path) where file.hasSuffix(".png") {
+            try fm.removeItem(at: setDir.appendingPathComponent(file))
+        }
+        for file in try fm.contentsOfDirectory(atPath: iconset.path) {
+            try fm.copyItem(at: iconset.appendingPathComponent(file), to: setDir.appendingPathComponent(file))
+        }
+        let contents = "{\n  \"images\" : [\n\(entries.joined(separator: ",\n"))\n  ],\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n"
+        try contents.write(to: setDir.appendingPathComponent("Contents.json"), atomically: true, encoding: .utf8)
+        let catalogContents = URL(fileURLWithPath: catalogDir).appendingPathComponent("Contents.json")
+        if !fm.fileExists(atPath: catalogContents.path) {
+            try "{\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n"
+                .write(to: catalogContents, atomically: true, encoding: .utf8)
+        }
+        print("wrote AppIcon.appiconset (16-512 pt, 1x and 2x) to \(setDir.path)")
+    }
+    try? fm.removeItem(at: iconset)
+    exit(0)
+}
+
+// MARK: - iOS icon and cabinet art
 
 let outDir = URL(fileURLWithPath: catalogDir).appendingPathComponent("AppIcon.appiconset").path
 try FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
