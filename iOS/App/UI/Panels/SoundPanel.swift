@@ -129,11 +129,14 @@ private struct SoundForm: View {
     }
 }
 
-/// Why everything below is dimmed, with the way out.
+/// Why everything below is dimmed, with the way out. In the wide layout's side column the
+/// remote's own power control is on screen beside it (or in the vertical bar), so the
+/// panel only explains, keeping one power control in view; as a sheet it offers Turn On.
 private struct StandbyNotice: View {
     let lastSource: Source
 
     @Environment(SpeakerModel.self) private var model
+    @Environment(\.isWideLayout) private var isWide
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -143,14 +146,16 @@ private struct StandbyNotice: View {
                 Image(systemName: "power")
                     .foregroundStyle(.secondary)
             }
-            Button {
-                model.togglePower()
-            } label: {
-                Text("Turn On")
-                    .fontWeight(.semibold)
+            if !isWide {
+                Button {
+                    model.togglePower()
+                } label: {
+                    Text("Turn On")
+                        .fontWeight(.semibold)
+                }
+                .accessibilityHint("Turns on with \(lastSource.displayName)")
+                .prominentGlassStyle()
             }
-            .accessibilityHint("Turns on with \(lastSource.displayName)")
-            .prominentGlassStyle()
         }
     }
 }
