@@ -39,9 +39,9 @@ Control Center controls and Siri. Like the Mac app, it talks straight to the spe
 Wi-Fi network, with no account and nothing in between.
 
 It has been **submitted to the App Store** as *Speakeasy: Hi-Fi Remote*; the link goes here
-once Apple approves it. [Website](https://zalberico.com/kef-menubar/) ·
-[Support](https://zalberico.com/kef-menubar/support/) ·
-[Privacy](https://zalberico.com/kef-menubar/privacy/)
+once Apple approves it. [Website](https://zalberico.com/speakeasy/) ·
+[Support](https://zalberico.com/speakeasy/support/) ·
+[Privacy](https://zalberico.com/speakeasy/privacy/)
 
 <table>
   <tr>
@@ -159,7 +159,7 @@ This section is for the Mac app. For the iPhone app, see
 ### Download
 
 1. Download the latest **Speakeasy-….zip** from
-   [Releases](https://github.com/zalberico/kef-menubar/releases/latest) and unzip it.
+   [Releases](https://github.com/zalberico/speakeasy/releases/latest) and unzip it.
 2. Move **Speakeasy** to your Applications folder and open it. The app is signed and
    notarized by Apple, so macOS only asks you to confirm opening an app downloaded from
    the internet.
@@ -193,8 +193,8 @@ a good idea either way.
 
 ### Mac App Store
 
-Speakeasy for Mac is coming to the Mac App Store as part of the same listing as the iPhone
-app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps it up to
+Speakeasy for Mac has been submitted to the Mac App Store, on the same listing as the
+iPhone app. It's the same menu bar app, sandboxed, without Sparkle: the App Store keeps it up to
 date. Until it's out, use the download above.
 
 ### Build it yourself
@@ -209,8 +209,8 @@ If you'd rather build from source, it takes about a minute.
    ```
 3. Clone and build:
    ```bash
-   git clone https://github.com/zalberico/kef-menubar.git
-   cd kef-menubar
+   git clone https://github.com/zalberico/speakeasy.git
+   cd speakeasy
    scripts/build-app.sh --install
    ```
    This builds **Speakeasy.app**, signs it, copies it to `~/Applications` (over a
@@ -323,8 +323,8 @@ connected to, and you switch between them from the speaker's name at the top of 
 Its widgets, controls and Siri act on the speaker you picked last.
 
 **Is it on the App Store?** The iPhone app has been submitted as *Speakeasy: Hi-Fi
-Remote* and will be there once Apple approves it. The Mac app is coming to the Mac App
-Store under the same listing. In the meantime the Mac releases here are signed with
+Remote* and will be there once Apple approves it. The Mac app has been submitted to the
+Mac App Store under the same listing. In the meantime the Mac releases here are signed with
 Developer ID, notarized by Apple and keep themselves up to date, which is all macOS needs
 to open them without a warning.
 

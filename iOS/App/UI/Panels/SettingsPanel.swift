@@ -524,7 +524,7 @@ private struct AppPreferencesCard: View {
 }
 
 private struct AboutCard: View {
-    private static let readMe = URL(string: "https://github.com/zalberico/kef-menubar#readme")!
+    private static let readMe = URL(string: "https://github.com/zalberico/speakeasy#readme")!
 
     var body: some View {
         CardSection(header: "About") {
