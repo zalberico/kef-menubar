@@ -1,3 +1,6 @@
+// The GitHub (Developer ID) build only: the Mac App Store build sets APPSTORE and has no
+// Sparkle, since the App Store installs its updates.
+#if !APPSTORE
 import AppKit
 import Observation
 import Sparkle
@@ -44,13 +47,6 @@ final class AppUpdater: NSObject {
         NSApp.activate()
         controller.checkForUpdates(nil)
     }
-
-    static var currentVersion: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(short) (\(build))"
-    }
 }
 
 /// Gentle reminders: a menu bar app has no window to come back to, so a scheduled check that
@@ -74,3 +70,4 @@ extension AppUpdater: @preconcurrency SPUStandardUserDriverDelegate {
         pendingVersion = nil
     }
 }
+#endif

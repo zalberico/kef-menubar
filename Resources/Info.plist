@@ -13,9 +13,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>KEF Menu Bar</string>
+	<string>Speakeasy</string>
 	<key>CFBundleDisplayName</key>
-	<string>KEF Menu Bar</string>
+	<string>Speakeasy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -31,7 +31,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Zach Alberico. MIT License. Protocol derived from pykefcontrol (MIT).</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>KEF Menu Bar finds and controls your KEF speakers on the local network.</string>
+	<string>Speakeasy finds and controls your KEF speakers on the local network.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_kef-info._tcp</string>

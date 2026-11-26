@@ -21,10 +21,12 @@ struct SettingsView: View {
     }
 }
 
-/// Connection, shortcuts, launch at login and app updates.
+/// Connection, shortcuts, launch at login and app updates (the version, in the App Store build).
 private struct GeneralSettingsTab: View {
     @Environment(SpeakerModel.self) private var model
+    #if !APPSTORE
     @Environment(AppUpdater.self) private var updater
+    #endif
     @State private var manualHost = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginStatus = LaunchAtLogin.status
@@ -82,7 +84,7 @@ private struct GeneralSettingsTab: View {
             Section("General") {
                 Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: { setLaunchAtLogin($0) }))
                 if loginStatus == .requiresApproval {
-                    Text("Approve KEF Menu Bar in System Settings › General › Login Items.")
+                    Text("Approve Speakeasy in System Settings › General › Login Items.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let loginError {
@@ -90,15 +92,21 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
+            #if APPSTORE
+            Section("About") {
+                LabeledContent("Version", value: AppVersion.current)
+            }
+            #else
             Section("Updates") {
                 Toggle("Automatically check for updates", isOn: Binding(
                     get: { updater.automaticallyChecksForUpdates },
                     set: { updater.setAutomaticallyChecksForUpdates($0) }))
-                LabeledContent("Version \(AppUpdater.currentVersion)") {
+                LabeledContent("Version \(AppVersion.current)") {
                     Button("Check for Updates…") { updater.checkForUpdates() }
                         .disabled(!updater.canCheckForUpdates)
                 }
             }
+            #endif
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)

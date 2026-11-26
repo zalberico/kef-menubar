@@ -594,6 +594,8 @@ public final class SpeakerModel {
         guard let url, let client else { return }
         Task {
             let image = await Self.loadArtwork(url, client: client, maxPixelSize: Self.artworkMaxPixelSize)
+            // The size only: the URL can name what is playing.
+            log.info("artwork: \(image.map { "\($0.width)x\($0.height)" } ?? "unavailable", privacy: .public)")
             if artworkURL == url { artwork = image }
         }
     }

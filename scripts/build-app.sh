@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build "KEF Menu Bar.app", sign it for local use, and optionally install it.
+# Build "Speakeasy.app" (the GitHub / Developer ID build of the Mac menu bar app, with
+# Sparkle), sign it for local use, and optionally install it.
 #   scripts/build-app.sh            # build into build/
 #   scripts/build-app.sh --install  # also copy to ~/Applications and relaunch
 set -euo pipefail
@@ -9,16 +10,16 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app ]]; then
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
-APP_NAME="KEF Menu Bar"
+APP_NAME="Speakeasy"
 APP="build/$APP_NAME.app"
 
 swift build -c release --product KEFMenuBar --arch arm64
 BIN="$(swift build -c release --product KEFMenuBar --arch arm64 --show-bin-path)/KEFMenuBar"
 
-if [[ ! -f Resources/AppIcon.icns || Sources/KEFMenuBar/SpeakerGlyph.swift -nt Resources/AppIcon.icns ]]; then
-    ICON_SCRIPT="$(mktemp -d)/make-icon.swift"
-    cat Sources/KEFMenuBar/SpeakerGlyph.swift scripts/make-icon.swift > "$ICON_SCRIPT"
-    swift "$ICON_SCRIPT" Resources/AppIcon.icns
+# The icon is the iPhone app's, in macOS style, drawn by the same script. It also writes the
+# Mac App Store build's asset catalog, so the two stay the same.
+if [[ ! -f Resources/AppIcon.icns || scripts/make-ios-icon.swift -nt Resources/AppIcon.icns ]]; then
+    swift scripts/make-ios-icon.swift --mac Resources/AppIcon.icns macOS/Resources/Assets.xcassets
 fi
 
 rm -rf "$APP"
@@ -69,6 +70,10 @@ echo "built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
     DEST="$HOME/Applications/$APP_NAME.app"
+    # Earlier releases were "KEF Menu Bar.app". Replace a copy there in place, as Sparkle
+    # does, so its login item and Dock or Finder references keep working.
+    OLD="$HOME/Applications/KEF Menu Bar.app"
+    [[ ! -e "$DEST" && -d "$OLD" ]] && DEST="$OLD"
     mkdir -p "$HOME/Applications"
     pkill -x KEFMenuBar 2>/dev/null && sleep 0.5 || true
     rm -rf "$DEST"

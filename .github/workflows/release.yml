@@ -1,6 +1,10 @@
-# Builds "KEF Menu Bar.app" and publishes it.
+# Builds "Speakeasy.app", the Mac menu bar app's GitHub (Developer ID) build, and publishes it.
+# (Up to 1.2.0 it was "KEF Menu Bar.app" in KEF-Menu-Bar-<version>.zip; the bundle ID, settings
+# and update feed are unchanged, and Sparkle updates an installed copy in place, under its old
+# name.) The Mac App Store build is separate: macOS/Speakeasy.xcodeproj, no Sparkle, built
+# and uploaded from Xcode, not here.
 #
-#   git tag v1.2.0 && git push origin v1.2.0   -> GitHub Release v1.2.0 with KEF-Menu-Bar-1.2.0.zip
+#   git tag v1.3.0 && git push origin v1.3.0   -> GitHub Release v1.3.0 with Speakeasy-1.3.0.zip
 #   Actions > Release > Run workflow           -> test build, downloadable from the run's artifacts
 #   A pull request that changes the package, sources, tests, this file or the build script
 #   also gets a test build (signed and notarized when the secrets are available; never published).
@@ -34,6 +38,7 @@ on:
       - .github/workflows/release.yml
       - scripts/build-app.sh
       - scripts/make-appcast.sh
+      - scripts/make-ios-icon.swift
       - Package.swift
       - Package.resolved
       - Resources/**
@@ -80,7 +85,7 @@ jobs:
           fi
           [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || { echo "::error::Tag must look like v1.2.0, not $GITHUB_REF_NAME"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "zip=KEF-Menu-Bar-$label.zip" >> "$GITHUB_OUTPUT"
+          echo "zip=Speakeasy-$label.zip" >> "$GITHUB_OUTPUT"
           xcodebuild -version
           swift --version
 
@@ -118,17 +123,17 @@ jobs:
         run: |
           key="$RUNNER_TEMP/notary.p8"
           echo "$NOTARY_KEY_P8" | base64 --decode > "$key"
-          ditto -c -k --keepParent "build/KEF Menu Bar.app" "$RUNNER_TEMP/notarize.zip"
+          ditto -c -k --keepParent build/Speakeasy.app "$RUNNER_TEMP/notarize.zip"
           xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
             --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 20m
-          xcrun stapler staple "build/KEF Menu Bar.app"
-          spctl --assess --type execute --verbose=2 "build/KEF Menu Bar.app"
+          xcrun stapler staple build/Speakeasy.app
+          spctl --assess --type execute --verbose=2 build/Speakeasy.app
           rm "$key"
 
       - name: Package
         run: |
-          ditto -c -k --keepParent "build/KEF Menu Bar.app" "${{ steps.version.outputs.zip }}"
-          codesign -dv "build/KEF Menu Bar.app" 2>&1 | grep -E "Authority|Signature|Identifier" || true
+          ditto -c -k --keepParent build/Speakeasy.app "${{ steps.version.outputs.zip }}"
+          codesign -dv build/Speakeasy.app 2>&1 | grep -E "Authority|Signature|Identifier" || true
           shasum -a 256 "${{ steps.version.outputs.zip }}"
 
       - name: Upload build artifact
@@ -180,12 +185,12 @@ jobs:
           APPCAST: ${{ steps.appcast.outputs.file }}
         run: |
           if [[ -n "${CODESIGN_IDENTITY:-}" && -n "$NOTARY_KEY_P8" ]]; then
-            note="Signed with Developer ID and notarized by Apple: unzip, move **KEF Menu Bar** to Applications and open it."
+            note="Signed with Developer ID and notarized by Apple: unzip, move **Speakeasy** to Applications and open it. Installed copies of KEF Menu Bar update themselves to it (keeping their name in Finder)."
           else
-            note="This build is not notarized. After unzipping and moving **KEF Menu Bar** to Applications, open it once, then allow it in **System Settings › Privacy & Security › Open Anyway**. See the README for details."
+            note="This build is not notarized. After unzipping and moving **Speakeasy** to Applications, open it once, then allow it in **System Settings › Privacy & Security › Open Anyway**. See the README for details."
           fi
           notes="$(printf '%s\n\nRequires macOS 14 Sonoma or later on Apple silicon.\n\n' "$note")"
           # gh uploads the assets to a draft and publishes it after, so the release only
           # becomes "latest" (where installed copies look for appcast.xml) with both in place.
           gh release create "$GITHUB_REF_NAME" "$ZIP" ${APPCAST:+"$APPCAST"} \
-            --title "KEF Menu Bar $GITHUB_REF_NAME" --notes "$notes" --generate-notes --verify-tag
+            --title "Speakeasy for Mac $GITHUB_REF_NAME" --notes "$notes" --generate-notes --verify-tag
