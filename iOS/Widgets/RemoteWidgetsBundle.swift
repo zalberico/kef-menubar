@@ -5,6 +5,9 @@ import WidgetKit
 struct RemoteWidgetsBundle: WidgetBundle {
     var body: some Widget {
         NowPlayingWidget()
+        PowerControl()
+        MuteControl()
+        InputControl()
         #if DEBUG || PROBE
         ProbeControl()
         #endif
