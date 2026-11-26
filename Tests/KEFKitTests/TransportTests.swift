@@ -154,6 +154,18 @@ struct TransportTests {
         #expect(await client.transport.isSecure == false)
     }
 
+    /// A task on an invalidated URLSession raises an Objective-C exception (an app crash), so a
+    /// closed transport must refuse before touching its session.
+    @Test func closedTransportFailsInsteadOfCrashing() async throws {
+        StubProtocol.install { _ in (200, #"[{"type":"i32_","i32_":5}]"#) }
+        let client = makeClient(.https)
+        #expect(try await client.volume() == 5)
+        await client.transport.close()
+        await #expect(throws: KEFError.self) { try await client.volume() }
+        let art = try #require(URL(string: Self.https + "/art.jpg"))
+        await #expect(throws: KEFError.self) { _ = try await client.transport.data(from: art) }
+    }
+
     @Test func connectionErrorsInvalidateTheScheme() async throws {
         let down = Locked(true)
         StubProtocol.install { seen in

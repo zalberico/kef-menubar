@@ -573,7 +573,7 @@ public final class SpeakerModel {
             if let secure = components.url { candidates.insert(secure, at: 0) }
         }
         for candidate in candidates {
-            if let (data, response) = try? await client.transport.session.data(from: candidate),
+            if let (data, response) = try? await client.transport.data(from: candidate),
                (response as? HTTPURLResponse)?.statusCode == 200,
                let image = decodeImage(data, maxPixelSize: maxPixelSize)
             {

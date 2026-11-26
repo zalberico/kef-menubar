@@ -81,6 +81,13 @@ public actor KEFTransport {
         session.invalidateAndCancel()
     }
 
+    /// GET `url` with this transport's session (artwork the speaker serves), failing instead of
+    /// crashing once the transport is closed.
+    public func data(from url: URL) async throws -> (Data, URLResponse) {
+        guard !closed else { throw KEFError.connection("client closed") }
+        return try await session.data(from: url)
+    }
+
     /// Forget the scheme chosen in `auto` mode: the next request probes again.
     public func invalidate() {
         if mode == .auto { base = nil }
@@ -200,6 +207,10 @@ public actor KEFTransport {
     private func send(
         base: String, _ request: KEFRequest, timeout: TimeInterval, authorization: String?
     ) async throws -> (Int, Data) {
+        // close() may have run while this request was suspended (in connect or provision).
+        // A task on an invalidated URLSession raises an Objective-C exception, which Swift
+        // can't catch, so check here, with nothing awaited between this and the task.
+        guard !closed else { throw KEFError.connection("client closed") }
         guard let url = URL(string: base + request.target) else {
             throw KEFError.invalidResponse("invalid URL \(base + request.target)")
         }
