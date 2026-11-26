@@ -61,9 +61,10 @@ struct NowPlayingHero: View {
             Button {
                 model.togglePower()
             } label: {
-                Label("Turn On (\(model.lastSource.displayName))", systemImage: "power")
+                Label("Turn On", systemImage: "power")
                     .fontWeight(.semibold)
             }
+            .accessibilityHint("Turns on with \(model.lastSource.displayName)")
             .prominentGlassStyle()
             .controlSize(.large)
         }

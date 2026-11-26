@@ -146,9 +146,10 @@ private struct StandbyNotice: View {
             Button {
                 model.togglePower()
             } label: {
-                Text("Turn On (\(lastSource.displayName))")
+                Text("Turn On")
                     .fontWeight(.semibold)
             }
+            .accessibilityHint("Turns on with \(lastSource.displayName)")
             .prominentGlassStyle()
         }
     }
