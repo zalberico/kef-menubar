@@ -289,16 +289,16 @@ $K 192.0.2.20 firmware check     # ask the speaker to look for an update (instal
 
 ## FAQ
 
-**Do I still need KEF Connect?** Not if the speaker is plugged into your router with an
-Ethernet cable. A wired speaker joins your network by itself, with no setup in KEF
-Connect, and Speakeasy finds it; we've checked this on an LSX II. KEF Connect is only
-needed to put a speaker on Wi-Fi without a cable, for other network changes such as
-pairing, and for its streaming-service browsing. Everything on KEF Connect's settings
-screens that a desktop speaker needs is under **Settings › Speaker** on the Mac and
-**Settings** on the iPhone, and firmware updates are there too: **Check Now** asks the
-speaker to look for one, and **Update…** installs it after you confirm. The speaker then
-restarts and is unreachable for a few minutes. It also checks by itself every few hours
-and can install updates while idle, so you may never need the button.
+**Do I still need KEF Connect?** Not with Ethernet, but KEF Connect's Wi-Fi setup didn't
+work for me anyway. A speaker plugged into your router with an Ethernet cable joins your
+network by itself, with no setup in KEF Connect, and Speakeasy finds it (tested on an LSX
+II). KEF Connect is only needed to put a speaker on Wi-Fi without a cable, for other
+network changes such as pairing, and for its streaming-service browsing. Everything on KEF
+Connect's settings screens that a desktop speaker needs is under **Settings › Speaker** on
+the Mac and **Settings** on the iPhone, and firmware updates are there too: **Check Now**
+asks the speaker to look for one, and **Update…** installs it after you confirm. The
+speaker then restarts and is unreachable for a few minutes. It also checks by itself every
+few hours and can install updates while idle, so you may never need the button.
 
 **Is it safe to point at my speakers?** Both apps read state and change the same everyday
 settings KEF Connect does: volume, mute, input, playback, EQ, the volume limit and the
