@@ -3,7 +3,13 @@
 // on a deep teal-ink ground. Writes the light, dark and tinted 1024 px icons and the
 // Contents.json of a single-size iOS AppIcon with appearances.
 //
-// Run: swift scripts/make-ios-icon.swift iOS/App/Assets.xcassets/AppIcon.appiconset
+// The same drawing, without the teal ground, is the app's full-colour cabinet art: the
+// cabinet alone on a transparent background with a soft contact shadow, at 160 x 200 pt
+// (1x, 2x, 3x), light and dark (the dark icon's deeper saffron), as SpeakerCabinet.imageset.
+//
+// Run: swift scripts/make-ios-icon.swift iOS/App/Assets.xcassets
+// It writes AppIcon.appiconset and SpeakerCabinet.imageset inside the catalog; the icon
+// PNGs come out byte-identical on every run, so regenerating the art never changes them.
 // (The Mac app's icon is made by make-icon.swift from build-app.sh; this script is separate.)
 import CoreGraphics
 import Foundation
@@ -11,10 +17,10 @@ import ImageIO
 import UniformTypeIdentifiers
 
 guard CommandLine.arguments.count == 2 else {
-    FileHandle.standardError.write(Data("usage: swift scripts/make-ios-icon.swift <AppIcon.appiconset dir>\n".utf8))
+    FileHandle.standardError.write(Data("usage: swift scripts/make-ios-icon.swift <Assets.xcassets dir>\n".utf8))
     exit(2)
 }
-let outDir = CommandLine.arguments[1]
+let catalogDir = CommandLine.arguments[1]
 let cs = CGColorSpace(name: CGColorSpace.sRGB)!
 
 // MARK: - Colour helpers
@@ -161,12 +167,7 @@ func drawIcon(_ ctx: CGContext, size S: CGFloat, p: Palette) {
     let u = S * 0.74 / 16
     let ox = S / 2 - 6.5 * u
     let oy = S / 2 + S * 0.018 - 9 * u
-    func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * u, y: oy + y * u) }
     let cab = CGRect(x: ox + 1 * u, y: oy + 1 * u, width: 11 * u, height: 16 * u)
-    let cabPath = smoothRect(cab, 2.8 * u)
-    let k = p.shadowStrength
-    let tl = CGPoint(x: -1, y: 1), br = CGPoint(x: 1, y: -1)   // light direction helpers
-    func along(_ c: CGPoint, _ r: CGFloat, _ dir: CGPoint) -> CGPoint { CGPoint(x: c.x + dir.x * r * u, y: c.y + dir.y * r * u) }
 
     // A pool of light on the shelf under the speaker, so the contact shadow has something to land on.
     ctx.with {
@@ -175,16 +176,30 @@ func drawIcon(_ ctx: CGContext, size S: CGFloat, p: Palette) {
         ctx.drawRadialGradient(grad([(p.bgGlow.copy(alpha: p.bgGlow.alpha * 0.6)!, 0), (p.bgGlow.copy(alpha: 0)!, 1)]),
                                startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 8.5 * u, options: [])
     }
+    drawCabinet(ctx, u: u, ox: ox, oy: oy, p: p, ground: 1)
+}
+
+/// The cabinet, its contact shadow and its drop shadow, on the glyph grid: one grid unit is
+/// `u` px and the grid's origin is (`ox`, `oy`). `ground` scales the two shadows it casts
+/// (1 on the icon's shelf; lighter on a transparent background, where it must suit any colour).
+func drawCabinet(_ ctx: CGContext, u: CGFloat, ox: CGFloat, oy: CGFloat, p: Palette, ground: CGFloat) {
+    func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * u, y: oy + y * u) }
+    let cab = CGRect(x: ox + 1 * u, y: oy + 1 * u, width: 11 * u, height: 16 * u)
+    let cabPath = smoothRect(cab, 2.8 * u)
+    let k = p.shadowStrength
+    let tl = CGPoint(x: -1, y: 1), br = CGPoint(x: 1, y: -1)   // light direction helpers
+    func along(_ c: CGPoint, _ r: CGFloat, _ dir: CGPoint) -> CGPoint { CGPoint(x: c.x + dir.x * r * u, y: c.y + dir.y * r * u) }
+
     // Contact shadow on the "shelf": a tight dark core and a wide soft falloff.
     ctx.with {
         let c = CGPoint(x: cab.midX + 0.2 * u, y: cab.minY + 0.05 * u)
         ctx.translateBy(x: c.x, y: c.y); ctx.scaleBy(x: 1, y: 0.10)
-        ctx.drawRadialGradient(grad([(black(0.6 * k), 0), (black(0.28 * k), 0.55), (black(0), 1)]),
+        ctx.drawRadialGradient(grad([(black(0.6 * k * ground), 0), (black(0.28 * k * ground), 0.55), (black(0), 1)]),
                                startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 6.8 * u, options: [])
     }
     // Soft drop shadow from the key light (top-left -> falls down-right).
     ctx.with {
-        ctx.setShadow(offset: CGSize(width: 0.35 * u, height: -0.6 * u), blur: 1.8 * u, color: black(0.45 * k))
+        ctx.setShadow(offset: CGSize(width: 0.35 * u, height: -0.6 * u), blur: 1.8 * u, color: black(0.45 * k * ground))
         ctx.addPath(cabPath); ctx.setFillColor(p.cabDark); ctx.fillPath()
     }
 
@@ -322,7 +337,7 @@ func makeContext(_ w: Int, _ h: Int, opaque: Bool) -> CGContext {
     return ctx
 }
 
-func writePNG(_ image: CGImage, _ name: String) {
+func writePNG(_ image: CGImage, _ name: String, in outDir: String) {
     let url = URL(fileURLWithPath: outDir).appendingPathComponent(name)
     let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
     CGImageDestinationAddImage(dest, image, nil)
@@ -335,13 +350,14 @@ func renderIcon(_ p: Palette) -> CGImage {
     return ctx.makeImage()!
 }
 
+let outDir = URL(fileURLWithPath: catalogDir).appendingPathComponent("AppIcon.appiconset").path
 try FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 let icons: [(file: String, palette: Palette, appearance: String?)] = [
     ("AppIcon-1024.png", colour, nil),
     ("AppIcon-Dark-1024.png", dark, "dark"),
     ("AppIcon-Tinted-1024.png", tinted, "tinted"),
 ]
-for icon in icons { writePNG(renderIcon(icon.palette), icon.file) }
+for icon in icons { writePNG(renderIcon(icon.palette), icon.file, in: outDir) }
 
 // Single-size iOS icon: one 1024 px image per appearance, the system scales the rest.
 let images = icons.map { icon -> String in
@@ -353,3 +369,32 @@ let images = icons.map { icon -> String in
 let contents = "{\n  \"images\" : [\n\(images.joined(separator: ",\n"))\n  ],\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n"
 try contents.write(toFile: URL(fileURLWithPath: outDir).appendingPathComponent("Contents.json").path, atomically: true, encoding: .utf8)
 print("wrote \(icons.map(\.file).joined(separator: ", ")) and Contents.json to \(outDir)")
+
+// MARK: - Cabinet art
+
+/// The cabinet alone: 16 x 20 grid units (10 pt each), the cabinet centred across and 1.5
+/// units from the top, room below for its shadows, on a transparent background.
+func renderCabinet(_ p: Palette, scale: Int) -> CGImage {
+    let u = CGFloat(10 * scale)
+    let ctx = makeContext(16 * 10 * scale, 20 * 10 * scale, opaque: false)
+    drawCabinet(ctx, u: u, ox: 1.5 * u, oy: 1.5 * u, p: p, ground: 0.6)
+    return ctx.makeImage()!
+}
+
+let cabinetDir = URL(fileURLWithPath: catalogDir).appendingPathComponent("SpeakerCabinet.imageset").path
+try FileManager.default.createDirectory(atPath: cabinetDir, withIntermediateDirectories: true)
+var cabinetImages: [String] = []
+for (palette, appearance) in [(colour, nil), (dark, "dark")] as [(Palette, String?)] {
+    for scale in 1...3 {
+        let file = "SpeakerCabinet\(appearance == nil ? "" : "-Dark")@\(scale)x.png"
+        writePNG(renderCabinet(palette, scale: scale), file, in: cabinetDir)
+        let appearances = appearance.map {
+            "\n      \"appearances\" : [\n        {\n          \"appearance\" : \"luminosity\",\n          \"value\" : \"\($0)\"\n        }\n      ],"
+        } ?? ""
+        cabinetImages.append("    {\(appearances)\n      \"filename\" : \"\(file)\",\n      \"idiom\" : \"universal\",\n      \"scale\" : \"\(scale)x\"\n    }")
+    }
+}
+let cabinetContents = "{\n  \"images\" : [\n\(cabinetImages.joined(separator: ",\n"))\n  ],\n  \"info\" : {\n    \"author\" : \"xcode\",\n    \"version\" : 1\n  }\n}\n"
+try cabinetContents.write(toFile: URL(fileURLWithPath: cabinetDir).appendingPathComponent("Contents.json").path,
+                          atomically: true, encoding: .utf8)
+print("wrote SpeakerCabinet 1x-3x, light and dark, and Contents.json to \(cabinetDir)")
