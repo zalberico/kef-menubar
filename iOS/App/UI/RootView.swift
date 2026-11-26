@@ -39,13 +39,28 @@ struct RootView: View {
     let networkMonitoring: Bool
 
     @State private var ui = UIState()
+    /// The window's size without the keyboard: the layout must not change when a text field
+    /// in the wide layout's column raises it (that would remove the field it is typing in).
+    @State private var layoutSize: CGSize?
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
-        GeometryReader { proxy in
-            AdaptiveRoot(
-                layout: RemoteLayout(size: proxy.size, verticalSizeClass: verticalSizeClass),
-                width: proxy.size.width)
+        // The GeometryReader takes the window's size whatever its content's size, and its
+        // background measures that plus the keyboard's height: the content still avoids the
+        // keyboard. (Measuring inside the content's own stack would feed its size back.)
+        GeometryReader { _ in
+            if let layoutSize {
+                AdaptiveRoot(
+                    layout: RemoteLayout(size: layoutSize, verticalSizeClass: verticalSizeClass),
+                    width: layoutSize.width)
+            }
+        }
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                    layoutSize = size
+                }
+                .ignoresSafeArea(.keyboard)
         }
         .environment(ui)
         .background {
