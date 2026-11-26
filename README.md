@@ -29,6 +29,12 @@ code is [Sparkle](https://sparkle-project.org), which the Mac app uses to update
   </tr>
 </table>
 
+<p align="center">
+  <a href="https://github.com/zalberico/speakeasy/releases/latest/download/Speakeasy.zip"><b>⬇ Download Speakeasy for Mac</b></a><br>
+  <sub>Free · macOS 14 or later on Apple silicon · <a href="#download">How to install</a></sub><br>
+  <sub>Also coming to the <a href="#mac-app-store">Mac App Store</a> once Apple approves it.</sub>
+</p>
+
 > **Status:** works well every day on an LSX II (firmware 3.1.141) with a KC62 subwoofer.
 > Other W2-platform models should work but are untested. Reports and PRs are welcome.
 >
@@ -162,14 +168,23 @@ This section is for the Mac app. For the iPhone app, see
 
 ### Download
 
-1. Download the latest **Speakeasy-….zip** from
-   [Releases](https://github.com/zalberico/speakeasy/releases/latest) and unzip it.
-2. Move **Speakeasy** to your Applications folder and open it. The app is signed and
-   notarized by Apple, so macOS only asks you to confirm opening an app downloaded from
-   the internet.
+You can download Speakeasy here now, or wait for the [Mac App Store](#mac-app-store)
+version, which is in review: once Apple approves it, you can install it from there instead
+and the App Store keeps it up to date. Both are free and work the same way.
+
+1. **[Download Speakeasy for Mac](https://github.com/zalberico/speakeasy/releases/latest/download/Speakeasy.zip)**, a zip of about 3 MB. Safari unzips it for
+   you; with other browsers, double-click the zip in your Downloads folder.
+2. Drag **Speakeasy** into your **Applications** folder, then open it from there. The app
+   is signed with Developer ID and notarized by Apple, so macOS only asks you to confirm
+   opening an app downloaded from the internet.
 3. On first launch macOS asks for **Local Network** access. Allow it: the app can't reach
    the speaker without it. If you clicked Don't Allow, turn it back on in System Settings ›
    Privacy & Security › Local Network.
+4. Click the speaker icon in the menu bar. To have it there after every restart, open
+   **Settings…** from the panel and turn on **Launch at login**.
+
+Every version, with release notes, is on the
+[Releases](https://github.com/zalberico/speakeasy/releases) page.
 
 Already using **KEF Menu Bar**? It's the same app under its new name, and it updates
 itself to Speakeasy like any other update, keeping your speaker, shortcuts and settings.
