@@ -10,6 +10,7 @@ struct NowPlayingHero: View {
     let scrolls: Bool
 
     @Environment(SpeakerModel.self) private var model
+    @Environment(UIState.self) private var ui
 
     var body: some View {
         let showsTrack = model.displaysNowPlaying
@@ -58,9 +59,10 @@ struct NowPlayingHero: View {
             TransportControls(canPrevious: model.player.canPrevious, canPause: model.player.canPause,
                               isPlaying: model.player.isPlaying, canNext: model.player.canNext)
         } else if model.isOnline, !model.isOn {
-            // With a vertical bar (iPhone Duo) power always lives in the bar instead.
+            // With a vertical bar (iPhone Duo) power always lives in the bar instead: beside
+            // this column (closed), or beside the side column (open, wide layout).
             VerticalBarEdgeReader { edge in
-                if edge == nil {
+                if edge == nil, !ui.sideColumnHasVerticalBar {
                     Button {
                         model.togglePower()
                     } label: {

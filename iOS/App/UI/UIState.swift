@@ -25,6 +25,10 @@ final class UIState {
     var isSheetPresented = false
     /// The panel's navigation stack, shared by the sheet and the column.
     var panelPath: [Route] = []
+    /// The wide layout's side column sits beside the system's vertical bar (the open iPhone
+    /// Duo), so power lives in that bar. The remote column can't see the bar itself: the bar
+    /// belongs to the column beside it.
+    var sideColumnHasVerticalBar = false
 
     /// Scroll positions, restored when a layout change rebuilds a scroll view.
     var remoteScroll = ScrollPosition(edge: .top)
