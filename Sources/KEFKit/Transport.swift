@@ -84,8 +84,37 @@ public actor KEFTransport {
     /// GET `url` with this transport's session (artwork the speaker serves), failing instead of
     /// crashing once the transport is closed.
     public func data(from url: URL) async throws -> (Data, URLResponse) {
-        guard !closed else { throw KEFError.connection("client closed") }
-        return try await session.data(from: url)
+        try await load(URLRequest(url: url))
+    }
+
+    /// Run `request` on the session. A task on an invalidated URLSession raises an Objective-C
+    /// exception (an app crash Swift can't catch), and `close()` may run whenever this actor
+    /// is free. `URLSession.data(for:)` is no help: it leaves the actor before it creates its
+    /// task. So the `closed` check and the task's creation happen here, in one synchronous
+    /// stretch on this actor, where `close()` can't come in between.
+    private func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let pending = PendingTask()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
+                guard !closed else {
+                    continuation.resume(throwing: KEFError.connection("client closed"))
+                    return
+                }
+                let task = session.dataTask(with: request) { data, response, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else if let data, let response {
+                        continuation.resume(returning: (data, response))
+                    } else {
+                        continuation.resume(throwing: URLError(.badServerResponse))
+                    }
+                }
+                pending.started(task)
+                task.resume()
+            }
+        } onCancel: {
+            pending.cancel()
+        }
     }
 
     /// Forget the scheme chosen in `auto` mode: the next request probes again.
@@ -207,10 +236,8 @@ public actor KEFTransport {
     private func send(
         base: String, _ request: KEFRequest, timeout: TimeInterval, authorization: String?
     ) async throws -> (Int, Data) {
-        // close() may have run while this request was suspended (in connect or provision).
-        // A task on an invalidated URLSession raises an Objective-C exception, which Swift
-        // can't catch, so check here, with nothing awaited between this and the task.
-        guard !closed else { throw KEFError.connection("client closed") }
+        // close() may have run while this request was suspended (in connect or provision);
+        // load() refuses then, without touching the invalidated session.
         guard let url = URL(string: base + request.target) else {
             throw KEFError.invalidResponse("invalid URL \(base + request.target)")
         }
@@ -222,7 +249,7 @@ public actor KEFTransport {
         }
         if let authorization { urlRequest.setValue(authorization, forHTTPHeaderField: "Authorization") }
         do {
-            let (data, response) = try await session.data(for: urlRequest)
+            let (data, response) = try await load(urlRequest)
             guard let http = response as? HTTPURLResponse else {
                 throw KEFError.invalidResponse("not an HTTP response")
             }
@@ -231,5 +258,29 @@ public actor KEFTransport {
             if error.code == .cancelled && Task.isCancelled { throw CancellationError() }
             throw KEFError.connection("\(host): \(error.localizedDescription)")
         }
+    }
+}
+
+/// The URLSession task of one ``KEFTransport`` request, for a cancellation that can come
+/// before or after it exists.
+private final class PendingTask: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: URLSessionTask?
+    private var cancelled = false
+
+    func started(_ task: URLSessionTask) {
+        let cancelNow = lock.withLock {
+            if !cancelled { self.task = task }
+            return cancelled
+        }
+        if cancelNow { task.cancel() }
+    }
+
+    func cancel() {
+        let task = lock.withLock {
+            cancelled = true
+            return self.task
+        }
+        task?.cancel()
     }
 }

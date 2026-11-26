@@ -166,6 +166,22 @@ struct TransportTests {
         await #expect(throws: KEFError.self) { _ = try await client.transport.data(from: art) }
     }
 
+    /// close() racing a request (a reconnect or a command timeout while requests are in
+    /// flight): the request answers or fails, and never creates a task on the invalidated
+    /// session, which crashed the process before the check and the task shared one actor turn.
+    @Test func closeRacingRequestsNeverCrashes() async throws {
+        StubProtocol.install { _ in (200, #"[{"type":"i32_","i32_":5}]"#) }
+        let art = try #require(URL(string: Self.https + "/art.jpg"))
+        for _ in 0..<1000 {
+            let client = makeClient(.http)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { _ = try? await client.volume() }
+                group.addTask { _ = try? await client.transport.data(from: art) }
+                group.addTask { await client.transport.close() }
+            }
+        }
+    }
+
     @Test func connectionErrorsInvalidateTheScheme() async throws {
         let down = Locked(true)
         StubProtocol.install { seen in
