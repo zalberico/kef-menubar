@@ -262,14 +262,13 @@ private struct EQToggleRow: View {
     let isOn: Bool
 
     @Environment(SpeakerModel.self) private var model
-    @State private var toggles = 0
 
     var body: some View {
+        // No haptic on the tap, as for the remote's switches; a refused write buzzes with
+        // its banner (CommandHaptics).
         Toggle(title, isOn: Binding(get: { isOn }, set: { on in
-            toggles += 1
             model.updateEQ { $0.set(key, on) }
         }))
-        .sensoryFeedback(.selection, trigger: toggles)
     }
 }
 

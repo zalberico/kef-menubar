@@ -10,8 +10,8 @@ struct VolumeControl: View {
     @State private var ups = 0
     @State private var downs = 0
     @State private var limitHits = 0
-    @State private var muteToggles = 0
-    @State private var pinnedAtLimit = false
+    /// The slider is being dragged: its ticks are for the drag, not for the speaker's changes.
+    @State private var isDragging = false
 
     var body: some View {
         let ceiling = model.volumeCeiling
@@ -33,7 +33,10 @@ struct VolumeControl: View {
                 setFromSlider(value)
             } adjust: { direction in
                 step(direction)
+            } editingChanged: { editing in
+                isDragging = editing
             }
+            .modifier(LevelTicks(level: isDragging ? model.volume : nil, ceiling: ceiling))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -42,7 +45,7 @@ struct VolumeControl: View {
         .sensoryFeedback(.increase, trigger: ups)
         .sensoryFeedback(.decrease, trigger: downs)
         .sensoryFeedback(.impact(weight: .heavy), trigger: limitHits)
-        .sensoryFeedback(.selection, trigger: muteToggles)
+        // Mute's own haptic comes when the speaker confirms it (CommandHaptics).
     }
 
     private var buttons: some View {
@@ -52,7 +55,6 @@ struct VolumeControl: View {
                 StepButton(symbol: "minus", label: "Volume Down") { step(-1) }
                 StepButton(symbol: "plus", label: "Volume Up") { step(1) }
                 MuteButton(muted: model.muted) {
-                    muteToggles += 1
                     model.toggleMute()
                 }
             }
@@ -78,9 +80,6 @@ struct VolumeControl: View {
         let requested = Int(value.rounded())
         guard requested != model.volume else { return }
         model.setVolume(requested)
-        let pinned = model.volumeLimited && requested >= model.volumeCeiling
-        if pinned, !pinnedAtLimit { limitHits += 1 }
-        pinnedAtLimit = pinned
     }
 }
 
@@ -91,15 +90,17 @@ private struct VolumeReadout: View {
     let limit: Int?
 
     @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 54
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(volume, format: .number)
                 .font(.system(size: size, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .contentTransition(.numericText(value: Double(volume)))
+                // Digits roll with the value; with Reduce Motion they just change.
+                .contentTransition(reduceMotion ? .identity : .numericText(value: Double(volume)))
                 .foregroundStyle(muted ? .secondary : .primary)
-                .animation(.snappy, value: volume)
+                .animation(reduceMotion ? nil : .snappy, value: volume)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(caption)
@@ -149,9 +150,8 @@ private struct MuteButton: View {
         let button = Button {
             action()
         } label: {
-            Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            MuteSymbol(muted: muted)
                 .font(.title3)
-                .contentTransition(.symbolEffect(.replace))
                 .frame(width: 40, height: 40)
         }
         .buttonBorderShape(.circle)
@@ -167,6 +167,37 @@ private struct MuteButton: View {
     }
 }
 
+/// The speaker's mute state: the slash draws in and out (a crossfade with Reduce Motion).
+/// Shared with the mute button in the vertical bar.
+struct MuteSymbol: View {
+    let muted: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+    }
+}
+
+/// Haptics for dragging a 0…100 level: a light tick at every ten and a firmer bump on
+/// reaching the speaker's limit (100 without one), never one per step. `level` is `nil`
+/// while nothing is being dragged, so changes from the speaker stay silent. Shared with
+/// the volume sliders in Settings.
+struct LevelTicks: ViewModifier {
+    let level: Int?
+    let ceiling: Int
+
+    func body(content: Content) -> some View {
+        content.sensoryFeedback(trigger: level) { old, new in
+            guard let old, let new, old != new else { return nil }
+            if new >= ceiling, old < ceiling { return .impact(weight: .heavy) }
+            if new / 10 != old / 10 { return .selection }
+            return nil
+        }
+    }
+}
+
 /// 0…100 with the part above the speaker's limit disabled and a tick at the limit.
 private struct VolumeSlider: View {
     let volume: Int
@@ -174,13 +205,14 @@ private struct VolumeSlider: View {
     let limit: Int?
     let set: (Double) -> Void
     let adjust: (Int) -> Void
+    let editingChanged: (Bool) -> Void
 
     var body: some View {
         let value = Binding<Double>(get: { Double(volume) }, set: { set($0) })
         // SwiftUI's slider ticks make it snap to them, so the limit mark is drawn here.
-        Slider(value: value, in: 0...100, enabledBounds: limit.map { 0...Double($0) }) {
-            Text("Volume")
-        }
+        Slider(value: value, in: 0...100, enabledBounds: limit.map { 0...Double($0) },
+               label: { Text("Volume") },
+               onEditingChanged: { editing in editingChanged(editing) })
         .background {
             if let limit { LimitTick(fraction: Double(limit) / 100) }
         }

@@ -165,22 +165,18 @@ extension UIState.Panel {
 /// Mute in the vertical bar, tinted while muted (the volume card keeps its own).
 private struct MuteBarButton: View {
     @Environment(SpeakerModel.self) private var model
-    @State private var toggles = 0
 
     var body: some View {
         let muted = model.muted
         Button {
-            toggles += 1
             model.toggleMute()
         } label: {
-            Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .contentTransition(.symbolEffect(.replace))
+            MuteSymbol(muted: muted)
                 .foregroundStyle(muted ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
         .disabled(!model.isOn || model.inputSettling)
         // A toggle: VoiceOver reads "Mute, switch button, on" while muted.
         .accessibilityLabel("Mute")
         .accessibilityAddTraits(muted ? [.isToggle, .isSelected] : .isToggle)
-        .sensoryFeedback(.selection, trigger: toggles)
     }
 }

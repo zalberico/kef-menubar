@@ -45,9 +45,8 @@ final class UIState {
     /// A name sent to the speaker and not yet confirmed. The field keeps what was typed if
     /// the rename fails, so it can be sent again.
     var pendingRename: String?
-    /// Counts of renames the speaker confirmed and refused, for their haptics.
+    /// Renames the speaker confirmed, for their haptic (a refusal's comes with its error).
     var renamesConfirmed = 0
-    var renamesRefused = 0
     /// The volume limit slider while it's dragged (written on release).
     var maximumVolumeDraft: Double?
     /// Startup volume sliders while they're dragged, by input (`"all"` for one level).
@@ -123,13 +122,12 @@ final class UIState {
     /// Settle a pending rename against what the model reports: the model puts the old name
     /// back when the speaker refuses it (keep the typed text, so it can be sent again), and
     /// saves the name once the speaker took it (show the speaker's name again). With
-    /// `feedback`, the outcome is counted for its haptic; Settings appearing settles a rename
+    /// `feedback`, a confirmation is counted for its haptic; Settings appearing settles a rename
     /// that finished while it was closed without one.
     func reconcileRename(modelName: String, savedName: String, feedback: Bool = true) {
         guard let pending = pendingRename else { return }
         if modelName != pending {
             pendingRename = nil
-            if feedback { renamesRefused += 1 }
         } else if savedName == pending {
             pendingRename = nil
             renameDraft = nil

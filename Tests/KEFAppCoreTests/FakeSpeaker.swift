@@ -39,6 +39,10 @@ final class FakeSpeaker: @unchecked Sendable {
     private var maxInFlight = 0
     /// Seconds before each answer, per `"METHOD path"` or path (`"*"` for every other request).
     private var delays: [String: TimeInterval] = [:]
+    /// Paths whose writes the fake refuses (an API error), and paths whose writes it
+    /// answers but ignores.
+    private var refusedWrites: Set<String> = []
+    private var ignoredWrites: Set<String> = []
 
     private static let all = Box<[String: FakeSpeaker]>([:])
 
@@ -81,6 +85,8 @@ final class FakeSpeaker: @unchecked Sendable {
     func remove(_ path: String) { _ = lock.withLock { values.removeValue(forKey: path) } }
 
     func delay(_ seconds: TimeInterval, for path: String = "*") { lock.withLock { delays[path] = seconds } }
+    func refuseWrites(to path: String) { _ = lock.withLock { refusedWrites.insert(path) } }
+    func ignoreWrites(to path: String) { _ = lock.withLock { ignoredWrites.insert(path) } }
 
     var log: [Request] { lock.withLock { requests } }
     var writes: [Request] { log.filter { $0.method == "POST" && $0.endpoint == Endpoint.setData } }
@@ -121,6 +127,8 @@ final class FakeSpeaker: @unchecked Sendable {
                 guard let path, let value = values[path] else { return (500, #"{"error":{"message":"no such path"}}"#, delay) }
                 return (200, "[\(value)]", delay)
             case Endpoint.setData:
+                if let path, refusedWrites.contains(path) { return (500, #"{"error":{"message":"refused"}}"#, delay) }
+                if let path, ignoredWrites.contains(path) { return (200, "{}", delay) }
                 if let path, let written, json["role"] as? String == "value" { values[path] = written }
                 return (200, "{}", delay)
             case Endpoint.getRows:

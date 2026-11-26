@@ -1,17 +1,20 @@
 #if DEBUG
 import CoreGraphics
+import CoreText
 import Foundation
 import ImageIO
 import KEFAppCore
 import KEFKit
 
 /// Debug only: the `-DemoSpeaker` launch argument shows a made-up speaker ("Living Room",
-/// playing a placeholder track, one KC62 sub) for screenshots; add `-DemoVolumeLimit 40`
+/// playing a made-up album by a made-up band, one KC62 sub) for screenshots; next and
+/// previous step through its four tracks (two albums, each with a cover drawn in code); add `-DemoVolumeLimit 40`
 /// to turn its volume limit on, and `-DemoSource tv` (any input, or `standby`) to start on
 /// another input; `-DemoKW1 YES` puts the sub on a KW1 wireless kit (no T2 defaults), and
 /// `-DemoNoEQ YES` makes the speaker fail every EQ profile read. It offers a firmware update
 /// (3.2.10) that downloads, installs and restarts in about half a minute, all made up;
-/// `-DemoFirmwareUpdate NO` starts it up to date.
+/// `-DemoFirmwareUpdate NO` starts it up to date, and `-DemoUnreachable 20` makes it
+/// unreachable for the first 20 s (the offline screen and its pull to reconnect).
 /// Its client talks to an in-process fake through a URLProtocol, discovery finds nothing,
 /// and its preferences live in their own suite, so nothing touches the network, the App
 /// Group or the real speaker's settings.
@@ -28,6 +31,16 @@ enum DemoSpeaker {
     static let modelCode = "SP4041"
 
     static var isEnabled: Bool { ProcessInfo.processInfo.arguments.contains(argument) }
+
+    /// When `-DemoUnreachable` stops refusing connections (counted from the first request).
+    private static let reachableFrom = Date.now.addingTimeInterval(UserDefaults.standard.double(forKey: "DemoUnreachable"))
+
+    /// `-DemoUnreachable` is still refusing connections. (The end is read before the clock:
+    /// the first read sets it.)
+    static var isUnreachable: Bool {
+        let end = reachableFrom
+        return Date.now < end
+    }
 
     /// A client for the in-process fake (and only it).
     static func makeClient(host: String = host) -> KEFClient {
@@ -87,6 +100,11 @@ final class DemoSpeakerState: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String] = [:]
     private var playing = true
+    /// Which of ``tracks`` is playing.
+    private var track = 0
+    /// Changes the event queue reports next, like a real speaker's: a path and its new
+    /// typed value, or no value ("changed, fetch it": the app then reads everything again).
+    private var changes: [(path: String, value: String?)] = []
     /// The made-up firmware update: offered until it's installed.
     private var offersUpdate = UserDefaults.standard.object(forKey: "DemoFirmwareUpdate") == nil
         || UserDefaults.standard.bool(forKey: "DemoFirmwareUpdate")
@@ -97,9 +115,22 @@ final class DemoSpeakerState: @unchecked Sendable {
     /// The update's timeline, in seconds from "Update": download, install, then a restart
     /// during which the speaker can't be reached.
     private static let downloadEnd = 8.0, installEnd = 16.0, restartEnd = 28.0
-    let artwork: Data = DemoSpeakerState.makeArtwork()
+    /// The made-up albums: a title, its cover's path and the cover.
+    struct Album: Sendable {
+        let title: String
+        let path: String
+        let cover: @Sendable () -> Data
+    }
 
-    static let artworkPath = "/demo/artwork.png"
+    static let artist = "The Speakeasy Trio"
+    static let lateNight = Album(title: "Late Night Session", path: "/demo/late-night-session.png",
+                                 cover: { DemoCover.lateNightSession })
+    static let earlyLight = Album(title: "Early Light", path: "/demo/early-light.png",
+                                  cover: { DemoCover.earlyLight })
+    static let tracks: [(title: String, album: Album)] = [
+        ("Corner Booth", lateNight), ("Velvet Lamps", lateNight), ("Two A.M. Stroll", lateNight),
+        ("Morning Rain", earlyLight),
+    ]
 
     private init() {
         set(KEFPath.deviceName, typed: "string_", #""\#(DemoSpeaker.name)""#)
@@ -158,26 +189,48 @@ final class DemoSpeakerState: @unchecked Sendable {
     struct Saved: Codable {
         var values: [String: String]
         var playing: Bool
+        var track: Int?
     }
 
-    var saved: Saved { lock.withLock { Saved(values: values, playing: playing) } }
+    var saved: Saved { lock.withLock { Saved(values: values, playing: playing, track: track) } }
 
     func restore(_ saved: Saved) {
         lock.withLock {
             values = saved.values
             playing = saved.playing
+            track = saved.track.map { min(max($0, 0), Self.tracks.count - 1) } ?? 0
         }
     }
 
     private var playerData: String {
         let source = values[KEFPath.physicalSource] ?? ""
         guard source.contains("wifi") else { return #"{"state":"stopped"}"# }
-        let icon = "http://\(DemoSpeaker.host)\(Self.artworkPath)"
+        let (title, album) = Self.tracks[track]
+        let icon = "http://\(DemoSpeaker.host)\(album.path)"
         return """
-        {"state":"\(playing ? "playing" : "paused")","trackRoles":{"title":"Placeholder Track","icon":"\(icon)",\
-        "mediaData":{"metaData":{"artist":"Demo Artist","album":"Sample Sessions","serviceID":"airplay"}}},\
+        {"state":"\(playing ? "playing" : "paused")","trackRoles":{"title":"\(title)","icon":"\(icon)",\
+        "mediaData":{"metaData":{"artist":"\(Self.artist)","album":"\(album.title)","serviceID":"airplay"}}},\
         "controls":{"pause":true,"next_":true,"previous":true}}
         """
+    }
+
+    /// The changes since the last poll as queue events, or `nil` when nothing changed.
+    func takeEvents() -> Data? {
+        lock.withLock {
+            guard !changes.isEmpty else { return nil }
+            let events = changes.map { change in
+                change.value.map { #"{"path":"\#(change.path)","itemType":"update","itemValue":\#($0)}"# }
+                    ?? #"{"path":"\#(change.path)","itemType":"update"}"#
+            }
+            changes = []
+            return Data("[\(events.joined(separator: ","))]".utf8)
+        }
+    }
+
+    /// Queue an event for `path` (the latest change of a path replaces an older one).
+    private func changed(_ path: String, value: String?) {
+        changes.removeAll { $0.path == path }
+        changes.append((path, value))
     }
 
     // MARK: Firmware
@@ -239,8 +292,10 @@ final class DemoSpeakerState: @unchecked Sendable {
         let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
         return lock.withLock {
             switch components?.path ?? "" {
-            case Self.artworkPath:
-                return (200, artwork)
+            case Self.lateNight.path:
+                return (200, Self.lateNight.cover())
+            case Self.earlyLight.path:
+                return (200, Self.earlyLight.cover())
             case Endpoint.getData:
                 if path == KEFPath.playerData { return (200, Data("[\(playerData)]".utf8)) }
                 if path == KEFPath.firmwareUpdateStatus { return (200, Data("[\(firmwareStatus)]".utf8)) }
@@ -265,7 +320,13 @@ final class DemoSpeakerState: @unchecked Sendable {
     private func write(path: String?, role: String?, value: Any?) {
         guard let path else { return }
         if path == KEFPath.playerControl, let control = (value as? [String: Any])?["control"] as? String {
-            if control == "pause" { playing.toggle() }
+            switch control {
+            case "pause": playing.toggle()
+            case "next": track = (track + 1) % Self.tracks.count
+            case "previous": track = (track + Self.tracks.count - 1) % Self.tracks.count
+            default: return
+            }
+            changed(KEFPath.playerData, value: nil)
             return
         }
         if role == "activate" {
@@ -290,37 +351,144 @@ final class DemoSpeakerState: @unchecked Sendable {
         guard role == "value", let value,
               let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
         else { return }
-        values[path] = String(decoding: data, as: UTF8.self)
+        let written = String(decoding: data, as: UTF8.self)
+        values[path] = written
+        changed(path, value: written)
+        // The track goes with the input (only Wi-Fi plays one here).
+        if path == KEFPath.physicalSource { changed(KEFPath.playerData, value: nil) }
     }
 
-    /// A 600 px placeholder cover: deep teal to saffron, with a record's grooves.
-    private static func makeArtwork() -> Data {
-        let size = 600
+}
+
+/// The demo's album covers, drawn in code (600 px PNGs): made-up records by a made-up band,
+/// no real artwork, names or logos.
+enum DemoCover {
+    static let size = 600
+
+    /// Warm and late: a plum night, an amber spotlight, three rings for the trio.
+    static let lateNightSession: Data = draw { context, size in
+        let s = CGFloat(size)
+        fill(context, s, top: rgb(0.16, 0.06, 0.10), bottom: rgb(0.05, 0.03, 0.05))
+        // The spotlight, upper right, with a wide soft glow.
+        let light = CGPoint(x: s * 0.66, y: s * 0.64)
+        glow(context, at: light, radius: s * 0.62, rgb(0.98, 0.58, 0.24, 0.55), rgb(0.55, 0.12, 0.10, 0))
+        disc(context, at: light, radius: s * 0.2, inner: rgb(1, 0.86, 0.56), outer: rgb(0.96, 0.55, 0.22))
+        // Three rings, overlapping along a diagonal.
+        context.setLineWidth(s * 0.006)
+        for (index, alpha) in [0.75, 0.5, 0.3].enumerated() {
+            let center = CGPoint(x: s * (0.27 + 0.085 * CGFloat(index)), y: s * (0.42 - 0.05 * CGFloat(index)))
+            context.setStrokeColor(rgb(0.99, 0.9, 0.76, alpha))
+            context.strokeEllipse(in: CGRect(x: center.x - s * 0.13, y: center.y - s * 0.13, width: s * 0.26, height: s * 0.26))
+        }
+        // A thin stage line.
+        context.setFillColor(rgb(0.99, 0.82, 0.55, 0.5))
+        context.fill(CGRect(x: s * 0.08, y: s * 0.235, width: s * 0.84, height: s * 0.003))
+        grain(context, s, light: true)
+        let cream = rgb(0.99, 0.92, 0.8)
+        text(context, "THE SPEAKEASY TRIO", font: "AvenirNext-DemiBold", size: s * 0.032, kern: s * 0.008,
+             color: cream, at: CGPoint(x: s * 0.08, y: s * 0.88))
+        text(context, "Late Night", font: "Didot-Italic", size: s * 0.1, kern: 0,
+             color: cream, at: CGPoint(x: s * 0.075, y: s * 0.12))
+        text(context, "Session", font: "Didot-Italic", size: s * 0.1, kern: 0,
+             color: rgb(0.98, 0.7, 0.38), at: CGPoint(x: s * 0.075, y: s * 0.035))
+    }
+
+    /// The other album: a pale dawn, a coral sun on the water.
+    static let earlyLight: Data = draw { context, size in
+        let s = CGFloat(size)
+        fill(context, s, top: rgb(0.74, 0.84, 0.9), bottom: rgb(0.99, 0.86, 0.74))
+        let horizon = s * 0.4
+        disc(context, at: CGPoint(x: s * 0.5, y: horizon), radius: s * 0.19,
+             inner: rgb(0.99, 0.62, 0.45), outer: rgb(0.93, 0.4, 0.33))
+        // Water below the horizon, with the sun's broken reflection.
+        context.setFillColor(rgb(0.62, 0.75, 0.84))
+        context.fill(CGRect(x: 0, y: 0, width: s, height: horizon))
+        context.setFillColor(rgb(0.97, 0.55, 0.42, 0.75))
+        for row in 0..<7 {
+            let width = s * (0.3 - 0.035 * CGFloat(row))
+            let y = horizon - s * (0.03 + 0.04 * CGFloat(row))
+            context.fill(CGRect(x: s * 0.5 - width / 2, y: y, width: width, height: s * 0.012))
+        }
+        grain(context, s, light: false)
+        let ink = rgb(0.13, 0.2, 0.3)
+        text(context, "THE SPEAKEASY TRIO", font: "AvenirNext-DemiBold", size: s * 0.032, kern: s * 0.008,
+             color: ink, at: CGPoint(x: s * 0.08, y: s * 0.88))
+        text(context, "Early Light", font: "Didot-Italic", size: s * 0.1, kern: 0,
+             color: ink, at: CGPoint(x: s * 0.075, y: s * 0.74))
+    }
+
+    // MARK: Drawing
+
+    private static func draw(_ body: (CGContext, Int) -> Void) -> Data {
         guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return Data() }
-        let colors = [CGColor(srgbRed: 0.04, green: 0.29, blue: 0.31, alpha: 1),
-                      CGColor(srgbRed: 0.92, green: 0.65, blue: 0.21, alpha: 1)] as CFArray
-        if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: [0, 1]) {
-            context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size, y: size), options: [])
-        }
-        let center = CGPoint(x: Double(size) * 0.62, y: Double(size) * 0.4)
-        context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.16))
-        for ring in stride(from: 40.0, through: 420.0, by: 26.0) {
-            context.setLineWidth(ring.truncatingRemainder(dividingBy: 78) == 0 ? 5 : 2)
-            context.strokeEllipse(in: CGRect(x: center.x - ring, y: center.y - ring, width: 2 * ring, height: 2 * ring))
-        }
-        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.85))
-        context.fillEllipse(in: CGRect(x: center.x - 18, y: center.y - 18, width: 36, height: 36))
+        body(context, size)
         guard let image = context.makeImage() else { return Data() }
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil) else {
-            return Data()
-        }
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil)
+        else { return Data() }
         CGImageDestinationAddImage(destination, image, nil)
         CGImageDestinationFinalize(destination)
         return data as Data
+    }
+
+    private static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor {
+        CGColor(srgbRed: r, green: g, blue: b, alpha: a)
+    }
+
+    private static func gradient(_ colors: [CGColor]) -> CGGradient? {
+        CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray, locations: nil)
+    }
+
+    /// The whole square, `top` to `bottom` (Core Graphics' origin is the bottom left).
+    private static func fill(_ context: CGContext, _ s: CGFloat, top: CGColor, bottom: CGColor) {
+        guard let gradient = gradient([bottom, top]) else { return }
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: s), options: [])
+    }
+
+    private static func glow(_ context: CGContext, at center: CGPoint, radius: CGFloat, _ inner: CGColor, _ outer: CGColor) {
+        guard let gradient = gradient([inner, outer]) else { return }
+        context.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius,
+                                   options: [])
+    }
+
+    private static func disc(_ context: CGContext, at center: CGPoint, radius: CGFloat, inner: CGColor, outer: CGColor) {
+        guard let gradient = gradient([inner, outer]) else { return }
+        context.saveGState()
+        context.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius))
+        context.clip()
+        let offset = CGPoint(x: center.x - radius * 0.3, y: center.y + radius * 0.3)
+        context.drawRadialGradient(gradient, startCenter: offset, startRadius: 0, endCenter: center,
+                                   endRadius: radius * 1.1, options: [.drawsAfterEndLocation])
+        context.restoreGState()
+    }
+
+    /// A fine print grain, the same every time.
+    private static func grain(_ context: CGContext, _ s: CGFloat, light: Bool) {
+        var seed: UInt64 = 0x5EED
+        func next() -> CGFloat {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return CGFloat(seed >> 33) / CGFloat(UInt64(1) << 31)
+        }
+        context.setFillColor(light ? rgb(1, 0.95, 0.85, 0.07) : rgb(0.2, 0.15, 0.1, 0.06))
+        for _ in 0..<9000 {
+            context.fill(CGRect(x: next() * s, y: next() * s, width: 1.2, height: 1.2))
+        }
+    }
+
+    private static func text(_ context: CGContext, _ string: String, font name: String, size: CGFloat,
+                             kern: CGFloat, color: CGColor, at origin: CGPoint) {
+        let font = CTFontCreateWithName(name as CFString, size, nil)
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+            NSAttributedString.Key(kCTKernAttributeName as String): kern,
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attributes))
+        context.textPosition = origin
+        CTLineDraw(line, context)
     }
 }
 
@@ -348,26 +516,46 @@ final class DemoSpeakerProtocol: URLProtocol, @unchecked Sendable {
             body = data
         }
         let state = DemoSpeakerState.shared
-        if state.isRestarting {
+        if state.isRestarting || DemoSpeaker.isUnreachable {
             fail(after: 0.3)
             return
         }
         let (status, data) = state.handle(url: url, body: body)
-        // The event queue's long poll waits like a real speaker's with nothing to report
-        // (and is cut off when a made-up firmware update restarts the speaker).
-        let isPoll = url.path == Endpoint.pollQueue
-        let delay: TimeInterval = isPoll ? state.pollDelay : 0.05
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
-            guard lock.withLock({ !stopped }) else { return }
-            if isPoll, state.isRestarting {
-                client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
-                return
-            }
-            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+        if url.path == Endpoint.pollQueue {
+            poll(url: url, until: Date.now + state.pollDelay)
+            return
         }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [self] in
+            answer(url: url, status: status, data: data)
+        }
+    }
+
+    /// The event queue's long poll: it waits like a real speaker's, answering early with a
+    /// change made meanwhile (another track), and is cut off when a made-up firmware update
+    /// restarts the speaker.
+    private func poll(url: URL, until deadline: Date) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [self] in
+            // A cancelled poll ends here, leaving the changes to the next one.
+            guard lock.withLock({ !stopped }) else { return }
+            let state = DemoSpeakerState.shared
+            if state.isRestarting {
+                client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+            } else if let events = state.takeEvents() {
+                answer(url: url, status: 200, data: events)
+            } else if Date.now >= deadline {
+                answer(url: url, status: 200, data: Data("[]".utf8))
+            } else {
+                poll(url: url, until: deadline)
+            }
+        }
+    }
+
+    private func answer(url: URL, status: Int, data: Data) {
+        guard lock.withLock({ !stopped }) else { return }
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
     }
 
     /// The speaker is "restarting": the connection is refused, like a real one mid-reboot.

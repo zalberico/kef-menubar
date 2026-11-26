@@ -15,7 +15,12 @@ struct NowPlayingHero: View {
         let showsTrack = model.displaysNowPlaying
         let track = model.player.track
         VStack(spacing: 16) {
-            ArtworkView(artwork: showsTrack ? model.artwork : nil, isAsleep: !model.displaysOn)
+            ArtworkView(artwork: showsTrack ? model.artwork : nil,
+                        expectsArtwork: showsTrack && track?.artworkURL != nil,
+                        isAsleep: !model.displaysOn)
+                .modifier(TrackSwipe(canPrevious: showsTrack && model.player.canPrevious,
+                                     canNext: showsTrack && model.player.canNext,
+                                     skip: { command in model.control(command) }))
                 .frame(maxWidth: scrolls ? 104 : 400, maxHeight: scrolls ? nil : .infinity)
                 .layoutPriority(-1)
 
@@ -33,6 +38,15 @@ struct NowPlayingHero: View {
             TrackCaption(title: track?.title ?? "",
                          subtitle: [track?.artist, track?.album].compactMap { $0 }.filter { !$0.isEmpty }
                              .joined(separator: " — "))
+                // The artwork's swipe, for VoiceOver (the artwork itself is hidden from it).
+                .accessibilityActions {
+                    if model.player.canNext {
+                        Button("Next Track") { model.control(.next) }
+                    }
+                    if model.player.canPrevious {
+                        Button("Previous Track") { model.control(.previous) }
+                    }
+                }
         } else {
             TrackCaption(title: sourceTitle, subtitle: sourceSubtitle)
         }
@@ -71,29 +85,97 @@ struct NowPlayingHero: View {
 }
 
 /// A square of artwork or, with none (TV, optical, nothing playing, standby), the
-/// full-colour cabinet in the same square, asleep in standby.
+/// full-colour cabinet in the same square, asleep in standby. A new track's artwork
+/// crossfades over the last one: while it loads (the model has none for a moment) the
+/// last one stays up, for at most 1.5 s, instead of flashing the cabinet in between.
 struct ArtworkView: View {
     let artwork: CGImage?
+    /// The track shown has artwork, maybe still loading.
+    var expectsArtwork = false
     let isAsleep: Bool
 
+    /// The last artwork shown, kept while the next one loads.
+    @State private var held: CGImage?
+
     var body: some View {
+        let shown = artwork ?? (expectsArtwork ? held : nil)
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                if let artwork {
-                    Image(decorative: artwork, scale: 1)
-                        .resizable()
-                        .scaledToFill()
-                        .clipShape(ArtworkShape())
-                        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
-                        .transition(.opacity)
-                } else {
-                    CabinetTile(isAsleep: isAsleep)
-                        .transition(.opacity)
+                ZStack {
+                    if let shown {
+                        Image(decorative: shown, scale: 1)
+                            .resizable()
+                            .scaledToFill()
+                            .clipShape(ArtworkShape())
+                            .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+                            .id(ObjectIdentifier(shown))
+                            .transition(.opacity)
+                    } else {
+                        CabinetTile(isAsleep: isAsleep)
+                            .transition(.opacity)
+                    }
                 }
             }
-            .animation(.easeInOut(duration: 0.35), value: artwork == nil)
+            // A dissolve, which stays with Reduce Motion (it doesn't move anything).
+            .animation(.easeInOut(duration: 0.45), value: shown.map(ObjectIdentifier.init))
+            .onChange(of: artwork.map(ObjectIdentifier.init), initial: true) {
+                if let artwork { held = artwork }
+            }
+            .task(id: artwork == nil && expectsArtwork) {
+                // Waiting for artwork: give up on the last one after a moment (a failed load).
+                guard artwork == nil, expectsArtwork, held != nil else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                if !Task.isCancelled { held = nil }
+            }
             .accessibilityHidden(true)
+    }
+}
+
+/// A horizontal swipe on the artwork for the next track (towards the leading edge) or the
+/// previous one, when the source allows it. The artwork leans a little with the finger
+/// (not with Reduce Motion); a light haptic when it skips. The buttons stay, and VoiceOver
+/// gets the caption's actions instead.
+private struct TrackSwipe: ViewModifier {
+    let canPrevious: Bool
+    let canNext: Bool
+    let skip: (PlayerCommand) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @GestureState(resetTransaction: Transaction(animation: .spring(duration: 0.35, bounce: 0.3)))
+    private var lean: CGFloat = 0
+    @State private var skips = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: reduceMotion ? 0 : lean)
+            .simultaneousGesture(swipe, isEnabled: canPrevious || canNext)
+            .sensoryFeedback(.impact(weight: .light), trigger: skips)
+    }
+
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .updating($lean) { value, lean, _ in
+                let dx = value.translation.width
+                guard abs(dx) > abs(value.translation.height) else { return }
+                // Follows the finger at a third of the way, less in a direction that can't skip.
+                let allowed = dx < 0 ? canNext : canPrevious
+                let limit: CGFloat = allowed ? 44 : 12
+                lean = max(-limit, min(limit, dx / (allowed ? 3 : 8)))
+            }
+            .onEnded { value in
+                let dx = value.translation.width
+                guard abs(dx) > abs(value.translation.height) * 1.5 else { return }
+                // Far enough, or a quick flick.
+                guard abs(dx) > 70 || abs(value.predictedEndTranslation.width) > 180 else { return }
+                if dx < 0, canNext {
+                    skips += 1
+                    skip(.next)
+                } else if dx > 0, canPrevious {
+                    skips += 1
+                    skip(.previous)
+                }
+            }
     }
 }
 

@@ -9,7 +9,9 @@ struct InputChips: View {
     let allowsWrapping: Bool
 
     @Environment(SpeakerModel.self) private var model
-    @State private var selections = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The selected tile's glass moves between tiles in this namespace.
+    @Namespace private var highlight
 
     var body: some View {
         let inputs = model.pickerInputs
@@ -37,7 +39,8 @@ struct InputChips: View {
                 .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             }
         }
-        .sensoryFeedback(.selection, trigger: selections)
+        // The highlight slides to the new tile (it just moves with Reduce Motion).
+        .animation(reduceMotion ? nil : .snappy(duration: 0.32), value: current)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Inputs")
     }
@@ -46,9 +49,8 @@ struct InputChips: View {
     /// scroll view's width.
     private func chips(_ inputs: [Source], current: Source?, columns: Int? = nil) -> some View {
         ForEach(inputs, id: \.self) { source in
-            InputChip(source: source, isSelected: source == current) {
+            InputChip(source: source, isSelected: source == current, highlight: highlight) {
                 guard source != current else { return }
-                selections += 1
                 model.select(source)
             }
             .modifier(ScrollRowWidth(columns: columns))
@@ -68,9 +70,12 @@ private struct ScrollRowWidth: ViewModifier {
     }
 }
 
+/// A glass tile; the selected one is amber glass that moves between tiles (one glass with
+/// an identity in the tiles' container, which morphs it) rather than a style each turns on.
 private struct InputChip: View {
     let source: Source
     let isSelected: Bool
+    let highlight: Namespace.ID
     let action: () -> Void
 
     /// The symbol's box grows with the text, so large sizes never overlap the name.
@@ -91,14 +96,35 @@ private struct InputChip: View {
             .frame(minWidth: 64, maxWidth: .infinity, minHeight: 44)
         }
         .buttonBorderShape(.roundedRectangle(radius: 16))
+
+        Group {
+            if isSelected {
+                // One tinted glass, identified across tiles: the container morphs it from
+                // the old tile to the new one.
+                button.buttonStyle(SelectedChipStyle(highlight: highlight))
+            } else {
+                button.buttonStyle(.glass)
+            }
+        }
         .accessibilityLabel(source.displayName)
         .accessibilityHint(isSelected ? "" : "Switches the speaker to this input")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
 
-        if isSelected {
-            button.prominentGlassStyle()
-        } else {
-            button.buttonStyle(.glass)
-        }
+/// The selected tile's label over the highlight: the prominent label colour, dimmed while
+/// pressed (it is already selected, so a press does nothing).
+private struct SelectedChipStyle: ButtonStyle {
+    let highlight: Namespace.ID
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .foregroundStyle(Color.prominentLabel)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .contentShape(.rect(cornerRadius: 16))
+            .glassEffect(.regular.tint(.accentColor).interactive(), in: .rect(cornerRadius: 16, style: .continuous))
+            .glassEffectID("selected", in: highlight)
     }
 }

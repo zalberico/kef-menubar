@@ -180,9 +180,9 @@ private struct NameCard: View {
                 }
             }
         }
-        // When the speaker answers, not when the name is sent.
+        // When the speaker answers, not when the name is sent (a refusal's error haptic
+        // comes with its banner, from CommandHaptics).
         .sensoryFeedback(.success, trigger: ui.renamesConfirmed)
-        .sensoryFeedback(.error, trigger: ui.renamesRefused)
     }
 
     private func rename(_ text: String) {
@@ -338,6 +338,8 @@ private struct VolumeSettingRow: View {
                 .background {
                     if limited { LimitTick(fraction: Double(ceiling) / 100) }
                 }
+                // The draft is there only while dragging: the main volume slider's ticks.
+                .modifier(LevelTicks(level: draft.map { Int($0) }, ceiling: limited ? max(ceiling, 1) : 100))
                 .accessibilityValue(aboveLimit ? "\(value), above the volume limit of \(ceiling)" : "\(Int(shown))")
                 .accessibilityAdjustableAction { direction in
                     let current = min(value, ceiling)
@@ -392,6 +394,7 @@ private struct VolumeLimitCard: View {
                            ui.maximumVolumeDraft = nil
                            if Int(draft) != maximum { model.setMaximumVolume(Int(draft)) }
                        })
+                    .modifier(LevelTicks(level: ui.maximumVolumeDraft.map { Int($0) }, ceiling: 100))
                     .accessibilityValue("\(Int(shown))")
                     .accessibilityAdjustableAction { direction in
                         switch direction {
@@ -549,20 +552,15 @@ private struct AboutCard: View {
 
 // MARK: - Rows
 
-/// A switch with a tap of haptics.
+/// A switch. Like mute on the remote it has no haptic of its own on the tap; a write the
+/// speaker refuses buzzes with its banner (CommandHaptics).
 private struct SettingToggle: View {
     let title: String
     let isOn: Bool
     let set: (Bool) -> Void
 
-    @State private var toggles = 0
-
     var body: some View {
-        Toggle(title, isOn: Binding(get: { isOn }, set: { on in
-            toggles += 1
-            set(on)
-        }))
-        .sensoryFeedback(.selection, trigger: toggles)
+        Toggle(title, isOn: Binding(get: { isOn }, set: { on in set(on) }))
     }
 }
 

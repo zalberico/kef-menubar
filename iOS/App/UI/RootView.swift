@@ -51,6 +51,21 @@ struct RootView: View {
         .background {
             if networkMonitoring { NetworkMonitorDriver() }
         }
+        .background { CommandHaptics() }
+    }
+}
+
+/// The haptics of what the speaker did with a command, in one place for the remote, the
+/// vertical bar, Sound and Settings: success once it confirms a mute, power or input
+/// change (never on the tap itself), an error when a command fails (with its banner).
+private struct CommandHaptics: View {
+    @Environment(SpeakerModel.self) private var model
+
+    var body: some View {
+        Color.clear
+            .sensoryFeedback(.success, trigger: model.confirmedChanges.total)
+            .sensoryFeedback(.error, trigger: model.failedCommands)
+            .accessibilityHidden(true)
     }
 }
 

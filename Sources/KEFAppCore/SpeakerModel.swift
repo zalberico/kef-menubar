@@ -55,6 +55,41 @@ public final class SpeakerModel {
     /// ``suspend()`` was called and ``resume()`` hasn't been since.
     public private(set) var isSuspended = false
 
+    /// A change of mute, power or input that this model asked for.
+    public enum ConfirmableChange: Sendable, Hashable {
+        case mute, power, input
+
+        /// Power and input are both written as the input.
+        var slot: ConfirmableChange { self == .mute ? .mute : .input }
+    }
+
+    /// Mute, power and input changes the speaker confirmed (read back with the value asked
+    /// for), counted per kind: what the iPhone app's success haptics follow.
+    public struct ConfirmedChanges: Equatable, Sendable {
+        public private(set) var mute = 0
+        public private(set) var power = 0
+        public private(set) var input = 0
+
+        public var total: Int { mute + power + input }
+
+        mutating func count(_ change: ConfirmableChange) {
+            switch change {
+            case .mute: mute += 1
+            case .power: power += 1
+            case .input: input += 1
+            }
+        }
+    }
+
+    public private(set) var confirmedChanges = ConfirmedChanges()
+    /// Commands that failed (the error banner), counted at most once a second: what the
+    /// iPhone app's error haptic follows.
+    public private(set) var failedCommands = 0
+    @ObservationIgnored private var lastFailureCounted: ContinuousClock.Instant?
+    /// The latest request of each kind (power and input share one: both write the input),
+    /// so an older one is never confirmed.
+    @ObservationIgnored private var changeRequests: [ConfirmableChange: Int] = [:]
+
     /// The speaker's own settings (Settings › Speaker); `nil` until loaded.
     public private(set) var speakerSettings: SpeakerSettings?
     /// The last attempt to read them got nothing (offer a retry).
@@ -597,14 +632,46 @@ public final class SpeakerModel {
 
     // MARK: Commands
 
-    private func perform(_ operation: @escaping @Sendable (KEFClient) async throws -> Void) async {
-        guard let client else { return }
+    /// Returns whether the operation went through.
+    @discardableResult
+    private func perform(_ operation: @escaping @Sendable (KEFClient) async throws -> Void) async -> Bool {
+        guard let client else { return false }
         do {
             try await operation(client)
+            return true
         } catch {
             report(error)
             // Undo optimistic local changes with the speaker's real values.
             try? await refreshAll(client)
+            return false
+        }
+    }
+
+    /// Number a new request of this kind (an older one still in flight is then never confirmed).
+    private func request(_ change: ConfirmableChange) -> Int {
+        let request = (changeRequests[change.slot] ?? 0) + 1
+        changeRequests[change.slot] = request
+        return request
+    }
+
+    /// After a write went through: read the value back until the speaker reports it (it can
+    /// take a moment to wake), then count the change as confirmed and show it (a read that
+    /// was already on its way may have put the old value back meanwhile). A newer request of
+    /// the same kind, another speaker or no match within about 3 s counts nothing.
+    private func confirm(_ change: ConfirmableChange, request: Int,
+                         _ matches: @escaping @Sendable (KEFClient) async throws -> Bool,
+                         then show: () -> Void) async {
+        guard let client else { return }
+        for attempt in 0..<7 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(500)) }
+            guard !Task.isCancelled, changeRequests[change.slot] == request, self.client?.host == client.host else { return }
+            if (try? await matches(client)) == true {
+                guard changeRequests[change.slot] == request else { return }
+                show()
+                confirmedChanges.count(change)
+                log.info("confirmed: \(String(describing: change), privacy: .public)")
+                return
+            }
         }
     }
 
@@ -615,6 +682,10 @@ public final class SpeakerModel {
     private func report(_ error: Error) {
         log.error("command failed: \(error.localizedDescription, privacy: .public)")
         lastError = (error as? KEFError)?.errorDescription ?? error.localizedDescription
+        if lastFailureCounted.map({ ContinuousClock.now - $0 >= .seconds(1) }) ?? true {
+            lastFailureCounted = .now
+            failedCommands += 1
+        }
         errorClearTask?.cancel()
         errorClearTask = Task {
             try? await Task.sleep(for: .seconds(5))
@@ -648,18 +719,31 @@ public final class SpeakerModel {
 
     public func setMuted(_ value: Bool) {
         muted = value
-        send { try await $0.setMuted(value) }
+        let request = request(.mute)
+        Task {
+            guard await perform({ try await $0.setMuted(value) }) else { return }
+            await confirm(.mute, request: request, { try await $0.isMuted() == value }, then: { muted = value })
+        }
     }
 
     public func toggleMute() { setMuted(!muted) }
 
     public func select(_ newSource: Source) {
+        // Waking or standby is a power change; anything else, an input change.
+        let change: ConfirmableChange = newSource == .standby || !isOn ? .power : .input
         setSource(newSource)
         let generation = sourceGeneration
+        let request = request(change)
         Task {
-            await perform { try await $0.setSource(newSource) }
+            let wrote = await perform { try await $0.setSource(newSource) }
             // The speaker loads the input's own volume and EQ as it switches.
             if generation == sourceGeneration { settle(after: .milliseconds(1500)) }
+            guard wrote else { return }
+            await confirm(change, request: request, { try await $0.source() == newSource }, then: {
+                guard source != newSource else { return }
+                setSource(newSource)
+                settle(after: .milliseconds(500))
+            })
         }
     }
 

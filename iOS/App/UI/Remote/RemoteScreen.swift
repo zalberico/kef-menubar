@@ -140,9 +140,39 @@ private struct PhaseContent: View {
         switch phase {
         case .onboarding: OnboardingView()
         case .localNetworkDenied: LocalNetworkDeniedView()
-        case .searching: SearchingView()
-        case .offline: OfflineView()
+        case .searching: SearchingView().modifier(PullToReconnect())
+        case .offline: OfflineView().modifier(PullToReconnect())
         case .remote(let readOnly): RemoteContent(layout: layout, readOnly: readOnly)
+        }
+    }
+}
+
+/// Looking for the speaker or offline: pull down to try again now rather than after the
+/// connection loop's wait (up to 30 s). The remote itself has no pull: online it would do
+/// nothing.
+private struct PullToReconnect: ViewModifier {
+    @Environment(SpeakerModel.self) private var model
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            ScrollView {
+                // At least the screen's height, so the state stays centred; taller (large
+                // text) scrolls.
+                content.frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.always)
+            .refreshable { await reconnect() }
+        }
+    }
+
+    /// Try again at once; the spinner stays until the attempt ends (at most 10 s).
+    private func reconnect() async {
+        guard !model.isOnline else { return }
+        model.retry()
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !model.isOnline, !model.connection.isOffline, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(200))
+            if Task.isCancelled { return }
         }
     }
 }
@@ -208,24 +238,26 @@ private struct StatusTitle: View {
 }
 
 /// Standby / turn on, like the Mac's header button.
+/// It shows while the speaker is on, so it appears as the speaker turns on, and bounces
+/// once the speaker confirms it (the haptic comes from CommandHaptics, not the tap).
 struct PowerButton: View {
     @Environment(SpeakerModel.self) private var model
-    @State private var toggles = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let isOn = model.isOn
         Button {
-            toggles += 1
             model.togglePower()
         } label: {
             Image(systemName: "power")
                 .fontWeight(.semibold)
                 .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .symbolEffect(.bounce, value: model.confirmedChanges.power)
+                .symbolEffectsRemoved(reduceMotion)
         }
         .disabled(!model.isOnline)
         .accessibilityLabel(isOn ? "Put speaker in standby" : "Turn speaker on")
         .accessibilityHint(isOn ? "" : "Turns on with \(model.lastSource.displayName)")
-        .sensoryFeedback(.impact(weight: .medium), trigger: toggles)
     }
 }
 
