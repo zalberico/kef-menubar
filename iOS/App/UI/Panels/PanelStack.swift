@@ -43,11 +43,21 @@ private struct PanelColumnChrome: ViewModifier {
     let isSheet: Bool
 
     @Environment(\.isWideLayout) private var isWide
+    @Environment(UIState.self) private var ui
 
     func body(content: Content) -> some View {
         VerticalBarEdgeReader { edge in
-            content.modifier(RemoteChromeToolbar(
-                isShown: !isSheet && ChromeColumn(verticalBarEdge: edge, isWide: isWide) == .panel))
+            let besideBar = !isSheet && isWide && edge != nil
+            content
+                .modifier(RemoteChromeToolbar(
+                    isShown: !isSheet && ChromeColumn(verticalBarEdge: edge, isWide: isWide) == .panel))
+                // Tell the remote column, which can't see the bar, that power is in it.
+                .onChange(of: besideBar, initial: true) { _, beside in
+                    if !isSheet { ui.sideColumnHasVerticalBar = beside }
+                }
+                .onDisappear {
+                    if !isSheet { ui.sideColumnHasVerticalBar = false }
+                }
         }
     }
 }
